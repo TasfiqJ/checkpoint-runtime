@@ -8,12 +8,16 @@ COPY proto/ /app/proto/
 # Copy manifest and lock
 COPY rust-dataplane/Cargo.toml rust-dataplane/Cargo.lock* rust-dataplane/build.rs ./
 
-# Create dummy main to cache dependencies
-RUN mkdir src && echo 'fn main() { println!("placeholder"); }' > src/main.rs
+# Create dummy source files to cache dependencies
+RUN mkdir -p src benches && \
+    echo 'fn main() { println!("placeholder"); }' > src/main.rs && \
+    echo 'pub fn lib() {}' > src/lib.rs && \
+    echo 'fn main() {}' > benches/write_throughput.rs
 RUN cargo build --release 2>/dev/null || true
 
-# Copy actual source
+# Copy actual source and benches
 COPY rust-dataplane/src/ ./src/
+COPY rust-dataplane/benches/ ./benches/
 
 # Build the real binary
 RUN cargo build --release

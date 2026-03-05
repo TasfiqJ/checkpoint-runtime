@@ -7,15 +7,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project definition
+# Copy project definition and source together (needed for pip install)
 COPY python-controlplane/pyproject.toml ./
-
-# Install dependencies
-RUN pip install --no-cache-dir -e ".[dev]" 2>/dev/null || pip install --no-cache-dir .
-
-# Copy source
 COPY python-controlplane/src/ ./src/
+
+# Copy proto files
 COPY proto/ /app/proto/
+
+# Install the package (non-editable for Docker)
+RUN pip install --no-cache-dir .
 
 ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
