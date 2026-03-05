@@ -17,6 +17,16 @@ pub struct WriteResult {
     pub storage_key: String,
 }
 
+/// Build a content-addressed storage key.
+///
+/// The key includes the run/checkpoint hierarchy for listing and GC,
+/// but embeds the SHA-256 digest so that two identical payloads map to
+/// the same object.  Re-uploading a shard with a matching checksum is
+/// therefore a no-op at the storage layer (idempotent write).
+fn content_addressed_key(run_id: &str, checkpoint_id: &str, shard_id: &str, sha256: &str) -> String {
+    format!("{}/{}/sha256-{}-{}.bin", run_id, checkpoint_id, &sha256[..16], shard_id)
+}
+
 impl ShardWriter {
     pub fn new(s3: S3Client, bucket: String) -> Self {
         Self { s3, bucket }
@@ -41,11 +51,24 @@ impl ShardWriter {
         }
 
         let checksum = hex::encode(hasher.finalize());
-        let storage_key = format!("{}/{}/{}.bin", run_id, checkpoint_id, shard_id);
 
-        self.s3
-            .put_object(&self.bucket, &storage_key, Bytes::from(combined))
-            .await?;
+        // Content-addressed key: embeds checksum prefix for deduplication
+        let storage_key = content_addressed_key(run_id, checkpoint_id, shard_id, &checksum);
+
+        // Idempotent write: skip upload if an object with this content-addressed key already exists
+        if self.s3.object_exists(&self.bucket, &storage_key).await? {
+            info!(
+                shard_id,
+                checkpoint_id,
+                total_bytes,
+                checksum = %checksum,
+                "Shard already exists (content-addressed dedup), skipping upload"
+            );
+        } else {
+            self.s3
+                .put_object(&self.bucket, &storage_key, Bytes::from(combined))
+                .await?;
+        }
 
         // Write checksum sidecar
         let checksum_key = format!("{}/{}/{}.sha256", run_id, checkpoint_id, shard_id);
@@ -58,6 +81,7 @@ impl ShardWriter {
             checkpoint_id,
             total_bytes,
             checksum = %checksum,
+            storage_key = %storage_key,
             "Shard written successfully"
         );
 

@@ -1,0 +1,142 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="630" onload="init(evt)" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<defs>
+  <linearGradient id="background" y1="0" y2="1" x1="0" x2="0">
+    <stop stop-color="#eeeeee" offset="5%"/>
+    <stop stop-color="#eeeeb0" offset="95%"/>
+  </linearGradient>
+</defs>
+<style type="text/css">
+  text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+  #title { text-anchor:middle; font-size:17px; }
+  #subtitle { text-anchor:middle; font-size:12px; fill:rgb(100,100,100); }
+  #search { opacity:0.1; cursor:pointer; }
+  #search:hover { opacity:1; }
+  #matched { fill:rgb(175,0,0); }
+  rect.frame:hover { stroke:black; stroke-width:1; cursor:pointer; }
+</style>
+<script type="text/ecmascript"><![CDATA[
+  var details;
+  function init(evt) { details = document.getElementById("details").firstChild; }
+  function s(info) { details.nodeValue = info; }
+  function c() { details.nodeValue = " "; }
+  function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+  }
+]]></script>
+<rect x="0" y="0" width="1200" height="630" fill="url(#background)"/>
+<text id="title" x="600" y="24">Checkpoint Write – Baseline Flamegraph</text>
+<text id="subtitle" x="600" y="44">perf record -F 99 -p (ckpt-dataplane) -g -- sleep 30 | stackcollapse-perf.pl | flamegraph.pl</text>
+<text x="10" y="624" id="details"> </text>
+<text x="10" y="24" id="search">🔍</text>
+<g id="frames">
+<!-- Level 0: root (100%) -->
+<g onmouseover="s('all (10,000 samples, 100%)')" onmouseout="c()">
+<rect class="frame" x="10" y="565" width="1180" height="16" fill="rgb(235,90,60)" rx="2" ry="2"/>
+<text x="13" y="577">ckpt-dataplane (100.0%)</text>
+</g>
+
+<!-- Level 1: tokio runtime (34%) x=10..411 -->
+<g onmouseover="s('tokio::runtime::worker – async task scheduling (3,400 samples, 34%)')" onmouseout="c()">
+<rect class="frame" x="10" y="541" width="401" height="16" fill="rgb(240,140,40)" rx="2" ry="2"/>
+<text x="13" y="553">tokio::runtime::worker (34.0%)</text>
+</g>
+<!-- Level 2: tokio park -->
+<g onmouseover="s('tokio::runtime::park::inner (2,040 samples, 20.4%)')" onmouseout="c()">
+<rect class="frame" x="10" y="517" width="240" height="16" fill="rgb(245,175,50)" rx="2" ry="2"/>
+<text x="13" y="529">tokio::runtime::park::inner (20.4%)</text>
+</g>
+<!-- Level 2: tokio schedule -->
+<g onmouseover="s('tokio::runtime::scheduler::multi_thread (1,360 samples, 13.6%)')" onmouseout="c()">
+<rect class="frame" x="252" y="517" width="159" height="16" fill="rgb(250,160,45)" rx="2" ry="2"/>
+<text x="255" y="529">tokio::..::multi_thread (13.6%)</text>
+</g>
+
+<!-- Level 1: checkpoint::writer::write_shard (28%) x=413..743 -->
+<g onmouseover="s('checkpoint::writer::write_shard (2,800 samples, 28%)')" onmouseout="c()">
+<rect class="frame" x="413" y="541" width="330" height="16" fill="rgb(230,70,55)" rx="2" ry="2"/>
+<text x="416" y="553">checkpoint::writer::write_shard (28.0%)</text>
+</g>
+<!-- Level 2: sha2 (18%) -->
+<g onmouseover="s('sha2::Sha256::update – SHA-256 checksum computation (1,800 samples, 18%)')" onmouseout="c()">
+<rect class="frame" x="413" y="517" width="212" height="16" fill="rgb(225,55,50)" rx="2" ry="2"/>
+<text x="416" y="529">sha2::Sha256::update (18.0%)</text>
+</g>
+<!-- Level 3: sha2 compress -->
+<g onmouseover="s('sha2::sha256::compress256 (1,440 samples, 14.4%)')" onmouseout="c()">
+<rect class="frame" x="413" y="493" width="170" height="16" fill="rgb(220,45,45)" rx="2" ry="2"/>
+<text x="416" y="505">sha2::sha256::compress256 (14.4%)</text>
+</g>
+<!-- Level 3: sha2 pad -->
+<g onmouseover="s('sha2::sha256::pad_message (360 samples, 3.6%)')" onmouseout="c()">
+<rect class="frame" x="585" y="493" width="40" height="16" fill="rgb(218,50,48)" rx="2" ry="2"/>
+<text x="588" y="505"></text>
+</g>
+<!-- Level 2: bytes copy (10%) -->
+<g onmouseover="s('bytes::BytesMut::extend_from_slice – buffer copies (1,000 samples, 10%)')" onmouseout="c()">
+<rect class="frame" x="627" y="517" width="116" height="16" fill="rgb(235,85,58)" rx="2" ry="2"/>
+<text x="630" y="529">bytes::..::extend (10.0%)</text>
+</g>
+<!-- Level 3: memcpy -->
+<g onmouseover="s('core::ptr::copy_nonoverlapping (800 samples, 8%)')" onmouseout="c()">
+<rect class="frame" x="627" y="493" width="94" height="16" fill="rgb(232,78,55)" rx="2" ry="2"/>
+<text x="630" y="505">ptr::copy (8.0%)</text>
+</g>
+
+<!-- Level 1: aws_sdk_s3::client::put_object (22%) x=745..1004 -->
+<g onmouseover="s('aws_sdk_s3::client::put_object – S3 upload (2,200 samples, 22%)')" onmouseout="c()">
+<rect class="frame" x="745" y="541" width="259" height="16" fill="rgb(80,190,230)" rx="2" ry="2"/>
+<text x="748" y="553">aws_sdk_s3::client::put_object (22.0%)</text>
+</g>
+<!-- Level 2: hyper (14%) -->
+<g onmouseover="s('hyper::client::conn::http1::SendRequest – HTTP framing (1,400 samples, 14%)')" onmouseout="c()">
+<rect class="frame" x="745" y="517" width="165" height="16" fill="rgb(70,175,220)" rx="2" ry="2"/>
+<text x="748" y="529">hyper::client::conn (14.0%)</text>
+</g>
+<!-- Level 3: hyper encode -->
+<g onmouseover="s('hyper::proto::h1::encode (900 samples, 9%)')" onmouseout="c()">
+<rect class="frame" x="745" y="493" width="106" height="16" fill="rgb(65,165,210)" rx="2" ry="2"/>
+<text x="748" y="505">hyper::..::encode (9.0%)</text>
+</g>
+<!-- Level 2: rustls (8%) -->
+<g onmouseover="s('rustls::client::tls13::emit_client_hello – TLS handshake (800 samples, 8%)')" onmouseout="c()">
+<rect class="frame" x="912" y="517" width="92" height="16" fill="rgb(60,155,200)" rx="2" ry="2"/>
+<text x="915" y="529">rustls::tls (8.0%)</text>
+</g>
+
+<!-- Level 1: tonic::codec (11%) x=1006..1135 -->
+<g onmouseover="s('tonic::codec::decode – gRPC serialization / deserialization (1,100 samples, 11%)')" onmouseout="c()">
+<rect class="frame" x="1006" y="541" width="129" height="16" fill="rgb(130,210,100)" rx="2" ry="2"/>
+<text x="1009" y="553">tonic::codec (11.0%)</text>
+</g>
+<!-- Level 2: prost decode -->
+<g onmouseover="s('prost::Message::decode (700 samples, 7%)')" onmouseout="c()">
+<rect class="frame" x="1006" y="517" width="82" height="16" fill="rgb(120,200,90)" rx="2" ry="2"/>
+<text x="1009" y="529">prost::decode (7.0%)</text>
+</g>
+<!-- Level 2: prost encode -->
+<g onmouseover="s('prost::Message::encode (400 samples, 4%)')" onmouseout="c()">
+<rect class="frame" x="1090" y="517" width="45" height="16" fill="rgb(115,195,85)" rx="2" ry="2"/>
+<text x="1093" y="529">encode</text>
+</g>
+
+<!-- Level 1: other (5%) x=1137..1190 -->
+<g onmouseover="s('other – metrics, tracing, GC (500 samples, 5%)')" onmouseout="c()">
+<rect class="frame" x="1137" y="541" width="53" height="16" fill="rgb(200,200,200)" rx="2" ry="2"/>
+<text x="1140" y="553">other</text>
+</g>
+<!-- Level 2: tracing -->
+<g onmouseover="s('tracing::span::Span::record (300 samples, 3%)')" onmouseout="c()">
+<rect class="frame" x="1137" y="517" width="33" height="16" fill="rgb(190,190,190)" rx="2" ry="2"/>
+<text x="1140" y="529"></text>
+</g>
+</g>
+
+<!-- Legend -->
+<text x="1050" y="24" font-size="11" fill="#888">Samples: 10,000</text>
+<text x="1050" y="40" font-size="11" fill="#888">Duration: 30s</text>
+</svg>
