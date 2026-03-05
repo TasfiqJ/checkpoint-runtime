@@ -1,0 +1,18 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-dataplane-pod
+  namespace: default
+  labels:
+    experiment: fault-tolerance
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: rust-dataplane
+  duration: "15s"
+  scheduler:
+    cron: "@every 120s"
