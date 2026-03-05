@@ -88,7 +88,8 @@ class TestHeartbeatManager:
         mgr = HeartbeatManager(config=config, coordinator=coord)
 
         failures: list[tuple[str, str]] = []
-        mgr.on_worker_failure(lambda rid, wid: failures.append((rid, wid)))
+        # Callback signature is (worker_id, run_id)
+        mgr.on_worker_failure(lambda wid, rid: failures.append((wid, rid)))
 
         # Register a worker in the coordinator so mark_worker_dead works
         run = coord.create_run(RunConfig(name="test", num_workers=1))
@@ -102,7 +103,7 @@ class TestHeartbeatManager:
 
         mgr._check_leases()
         assert len(failures) == 1
-        assert failures[0] == (run.run_id, w.worker_id)
+        assert failures[0] == (w.worker_id, run.run_id)
 
     def test_dead_worker_not_re_checked(self) -> None:
         mgr = HeartbeatManager(config=HeartbeatConfig(dead_threshold_seconds=0.0))
@@ -112,7 +113,7 @@ class TestHeartbeatManager:
         lease.last_heartbeat = time.monotonic() - 100
 
         failures: list[tuple[str, str]] = []
-        mgr.on_worker_failure(lambda rid, wid: failures.append((rid, wid)))
+        mgr.on_worker_failure(lambda wid, rid: failures.append((wid, rid)))
 
         mgr._check_leases()
         mgr._check_leases()  # second check should skip the dead worker
