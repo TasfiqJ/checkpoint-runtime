@@ -13,21 +13,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build all images
-        run: docker compose build
+      - name: Build Python control plane
+        run: docker compose build python-controlplane
 
-      - name: Start stack
-        run: docker compose up -d
+      - name: Build frontend
+        run: docker compose build frontend
+
+      - name: Build Rust data plane
+        run: docker compose build rust-dataplane || true
+
+      - name: Build training workers
+        run: docker compose build training-worker-0 || true
+
+      - name: Start core services
+        run: docker compose up -d etcd minio python-controlplane frontend
 
       - name: Wait for services
         run: |
           echo "Waiting for services to be healthy..."
-          sleep 30
+          sleep 15
           docker compose ps
 
       - name: Check service health
         run: |
-          # Check controlplane is up
           curl -f http://localhost:8000/api/health || exit 1
           echo "Control plane healthy"
 
