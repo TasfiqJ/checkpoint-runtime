@@ -16,8 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.78"
           components: rustfmt, clippy
 
       - name: Install protoc
@@ -35,13 +36,9 @@ jobs:
         working-directory: rust-dataplane
         run: cargo clippy --lib --bins -- -D warnings || true
 
-      - name: Compile library
+      - name: Build & test
         working-directory: rust-dataplane
-        run: cargo check --lib
-
-      - name: Unit tests
-        working-directory: rust-dataplane
-        run: cargo test --lib || true
+        run: cargo test --lib
 
   python:
     name: Python (lint + test)

@@ -16,9 +16,6 @@ use crate::storage::checksum::StreamingChecksum;
 use crate::storage::s3::S3Client;
 
 pub mod proto {
-    // Include common types first (ShardInfo, RunState, etc.) since
-    // checkpoint.proto cross-references ckpt_rt.common.ShardInfo.
-    tonic::include_proto!("ckpt_rt.common");
     tonic::include_proto!("ckpt_rt.checkpoint");
 }
 
