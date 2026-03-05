@@ -4,26 +4,50 @@ metadata:
   name: training-job
   labels:
     app: training
+    app.kubernetes.io/managed-by: Helm
 spec:
-  parallelism: 2
-  completions: 2
+  parallelism: {{ .Values.training.parallelism }}
+  completions: {{ .Values.training.parallelism }}
+  completionMode: Indexed
   template:
     metadata:
       labels:
         app: training
     spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
       restartPolicy: OnFailure
+      subdomain: training-workers
       initContainers:
         - name: wait-for-controlplane
           image: busybox
           command: ['sh', '-c', 'until wget -q -O- http://python-controlplane:8000/api/health; do echo waiting; sleep 2; done']
       containers:
         - name: worker
-          image: checkpoint-runtime/training:dev
+          image: "{{ .Values.training.image.repository }}:{{ .Values.training.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           env:
             - name: CONTROLPLANE_URL
               value: "http://python-controlplane:8000"
             - name: NUM_STEPS
-              value: "100"
+              value: {{ .Values.training.numSteps | quote }}
             - name: CHECKPOINT_INTERVAL
-              value: "20"
+              value: {{ .Values.training.checkpointInterval | quote }}
+            - name: WORLD_SIZE
+              value: {{ .Values.training.parallelism | quote }}
+            - name: WORKER_RANK
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['batch.kubernetes.io/job-completion-index']
+            - name: MASTER_ADDR
+              value: "training-job-0.training-workers"
+            - name: MASTER_PORT
+              value: "29500"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "training-worker"
+          ports:
+            - containerPort: 29500
+              name: ddp

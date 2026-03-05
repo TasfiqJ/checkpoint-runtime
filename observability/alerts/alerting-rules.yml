@@ -1,5 +1,5 @@
 groups:
-  - name: checkpoint-runtime
+  - name: checkpoint-runtime-latency
     rules:
       - alert: HighCheckpointWriteLatency
         expr: histogram_quantile(0.99, rate(ckpt_shard_write_duration_seconds_bucket[5m])) > 5
@@ -8,31 +8,131 @@ groups:
           severity: warning
         annotations:
           summary: "Checkpoint write p99 latency exceeds 5s"
-          description: "The p99 checkpoint shard write latency is {{ $value }}s"
+          description: "The p99 checkpoint shard write latency is {{ $value | humanizeDuration }}."
 
-      - alert: BackpressureQueueFull
-        expr: dataplane_backpressure_queue_depth > 28
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Backpressure queue near capacity"
-          description: "Queue depth is {{ $value }}/32"
-
-      - alert: WorkerHeartbeatLag
-        expr: controlplane_worker_heartbeat_lag_seconds > 10
-        for: 30s
-        labels:
-          severity: critical
-        annotations:
-          summary: "Worker heartbeat lag exceeds 10s"
-          description: "Worker {{ $labels.worker_id }} last heartbeat was {{ $value }}s ago"
-
-      - alert: HighS3RetryRate
-        expr: rate(dataplane_s3_retry_total[5m]) > 1
+      - alert: HighCheckpointReadLatency
+        expr: histogram_quantile(0.99, rate(ckpt_shard_read_duration_seconds_bucket[5m])) > 3
         for: 2m
         labels:
           severity: warning
         annotations:
-          summary: "Elevated S3 retry rate"
-          description: "S3 retries at {{ $value }}/sec"
+          summary: "Checkpoint read p99 latency exceeds 3s"
+          description: "The p99 checkpoint shard read latency is {{ $value | humanizeDuration }}."
+
+      - alert: HighCommitLatency
+        expr: histogram_quantile(0.99, rate(ckpt_checkpoint_commit_duration_seconds_bucket[5m])) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Checkpoint commit p99 latency exceeds 10s"
+          description: "The p99 checkpoint commit latency is {{ $value | humanizeDuration }}."
+
+  - name: checkpoint-runtime-errors
+    rules:
+      - alert: CheckpointCommitErrorRate
+        expr: rate(ckpt_checkpoint_commits_total{status="error"}[5m]) / rate(ckpt_checkpoint_commits_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Checkpoint commit error rate exceeds 5%"
+          description: "Commit error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: HighShardWriteErrorRate
+        expr: rate(ckpt_shard_writes_total{status="error"}[5m]) / rate(ckpt_shard_writes_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Shard write error rate exceeds 5%"
+          description: "Shard write error rate is {{ $value | humanizePercentage }}."
+
+      - alert: HighShardReadErrorRate
+        expr: rate(ckpt_shard_reads_total{status="error"}[5m]) / rate(ckpt_shard_reads_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Shard read error rate exceeds 5%"
+          description: "Shard read error rate is {{ $value | humanizePercentage }}."
+
+      - alert: HighAbortRate
+        expr: rate(ckpt_checkpoint_aborts_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated checkpoint abort rate"
+          description: "Checkpoint abort rate is {{ $value }}/sec."
+
+  - name: checkpoint-runtime-capacity
+    rules:
+      - alert: BackpressureQueueDepth
+        expr: ckpt_backpressure_queue_depth / 32 > 0.9
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backpressure queue above 90% capacity"
+          description: "Queue depth is {{ $value | humanizePercentage }} full ({{ with printf `ckpt_backpressure_queue_depth` }}{{ . }}{{ end }}/32)."
+
+      - alert: BackpressureQueueElevated
+        expr: ckpt_backpressure_queue_depth / 32 > 0.7
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backpressure queue above 70% capacity"
+          description: "Queue depth is {{ $value | humanizePercentage }} full."
+
+  - name: checkpoint-runtime-heartbeat
+    rules:
+      - alert: WorkerHeartbeatLag
+        expr: controlplane_worker_heartbeat_lag_seconds > 30
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker heartbeat lag exceeds 30s"
+          description: "Worker {{ $labels.worker_id }} last heartbeat was {{ $value }}s ago."
+
+      - alert: WorkerHeartbeatWarning
+        expr: controlplane_worker_heartbeat_lag_seconds > 15
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker heartbeat lag exceeds 15s"
+          description: "Worker {{ $labels.worker_id }} last heartbeat was {{ $value }}s ago."
+
+  - name: checkpoint-runtime-grpc
+    rules:
+      - alert: HighGrpcErrorRate
+        expr: sum(rate(ckpt_grpc_requests_total{status!="OK"}[5m])) / sum(rate(ckpt_grpc_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "gRPC error rate exceeds 5%"
+          description: "Overall gRPC error rate is {{ $value | humanizePercentage }}."
+
+      - alert: GrpcMethodErrors
+        expr: rate(ckpt_grpc_requests_total{status!="OK"}[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated gRPC errors for {{ $labels.method }}"
+          description: "Method {{ $labels.method }} seeing {{ $value }}/sec errors with status {{ $labels.status }}."
+
+  - name: checkpoint-runtime-gc
+    rules:
+      - alert: HighGcDeletionRate
+        expr: rate(ckpt_gc_shards_deleted_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusually high GC shard deletion rate"
+          description: "GC deleting {{ $value }}/sec shards (reason={{ $labels.reason }})."

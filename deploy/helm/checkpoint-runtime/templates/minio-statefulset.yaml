@@ -4,6 +4,7 @@ metadata:
   name: minio
   labels:
     app: minio
+    app.kubernetes.io/managed-by: Helm
 spec:
   serviceName: minio
   replicas: 1
@@ -15,9 +16,13 @@ spec:
       labels:
         app: minio
     spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
       containers:
         - name: minio
           image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           command:
             - minio
             - server
@@ -34,6 +39,24 @@ spec:
               name: s3
             - containerPort: 9001
               name: console
+          resources:
+            {{- toYaml .Values.minio.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: minio-data
               mountPath: /data
@@ -44,12 +67,15 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: {{ .Values.minio.persistence.size }}
+            storage: "{{ .Values.minio.persistence.size }}"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: minio
+  labels:
+    app: minio
+    app.kubernetes.io/managed-by: Helm
 spec:
   selector:
     app: minio

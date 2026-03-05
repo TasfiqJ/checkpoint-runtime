@@ -4,6 +4,7 @@ metadata:
   name: etcd
   labels:
     app: etcd
+    app.kubernetes.io/managed-by: Helm
 spec:
   serviceName: etcd
   replicas: 1
@@ -15,9 +16,13 @@ spec:
       labels:
         app: etcd
     spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
       containers:
         - name: etcd
           image: "{{ .Values.etcd.image.repository }}:{{ .Values.etcd.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           command:
             - etcd
             - --name=etcd0
@@ -30,6 +35,30 @@ spec:
               name: client
             - containerPort: 2380
               name: peer
+          resources:
+            {{- toYaml .Values.etcd.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - etcdctl
+                - endpoint
+                - health
+                - --endpoints=http://localhost:2379
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - etcdctl
+                - endpoint
+                - health
+                - --endpoints=http://localhost:2379
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: etcd-data
               mountPath: /var/lib/etcd
@@ -40,12 +69,15 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: {{ .Values.etcd.persistence.size }}
+            storage: "{{ .Values.etcd.persistence.size }}"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: etcd
+  labels:
+    app: etcd
+    app.kubernetes.io/managed-by: Helm
 spec:
   selector:
     app: etcd

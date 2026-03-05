@@ -45,6 +45,13 @@ etcd:
     tag: v3.5.12
   persistence:
     size: 2Gi
+  resources:
+    limits:
+      memory: 256Mi
+      cpu: "500m"
+    requests:
+      memory: 128Mi
+      cpu: "250m"
 
 minio:
   image:
@@ -54,6 +61,37 @@ minio:
     size: 10Gi
   rootUser: minioadmin
   rootPassword: minioadmin
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: "500m"
+    requests:
+      memory: 256Mi
+      cpu: "250m"
+
+training:
+  image:
+    repository: checkpoint-runtime/training
+    tag: dev
+  parallelism: 2
+  numSteps: 100
+  checkpointInterval: 20
+
+serviceAccount:
+  create: true
+  name: checkpoint-runtime
+
+otelCollector:
+  enabled: true
+  image:
+    repository: otel/opentelemetry-collector
+    tag: latest
+
+jaeger:
+  enabled: true
+  image:
+    repository: jaegertracing/all-in-one
+    tag: latest
 
 prometheus:
   enabled: true

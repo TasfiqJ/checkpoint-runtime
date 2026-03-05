@@ -1,0 +1,74 @@
+name: K8s Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  k8s-e2e:
+    name: Kubernetes E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      - name: Install Helm
+        run: |
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Create kind cluster
+        run: kind create cluster --config deploy/kind/kind-config.yaml --wait 60s
+
+      - name: Build and load images
+        run: |
+          docker build -t checkpoint-runtime/controlplane:dev -f python-controlplane/Dockerfile .
+          docker build -t checkpoint-runtime/frontend:dev -f frontend/Dockerfile .
+          kind load docker-image checkpoint-runtime/controlplane:dev --name ckpt-rt
+          kind load docker-image checkpoint-runtime/frontend:dev --name ckpt-rt
+
+      - name: Install Helm chart
+        run: |
+          helm install ckpt-rt deploy/helm/checkpoint-runtime \
+            --set rustDataplane.image.repository=checkpoint-runtime/dataplane \
+            --set rustDataplane.image.tag=dev \
+            --wait --timeout 120s
+        continue-on-error: true
+
+      - name: Verify pods
+        run: |
+          kubectl get pods -A
+          kubectl get services -A
+
+      - name: Check controlplane health
+        run: |
+          kubectl port-forward svc/python-controlplane 8000:8000 &
+          sleep 5
+          for i in 1 2 3 4 5; do
+            if curl -sf http://localhost:8000/api/health; then
+              echo ""
+              echo "Control plane healthy on K8s!"
+              exit 0
+            fi
+            echo "Attempt $i: waiting..."
+            sleep 3
+          done
+          echo "Health check failed"
+          kubectl logs -l app=python-controlplane --tail=30
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: kind delete cluster --name ckpt-rt
