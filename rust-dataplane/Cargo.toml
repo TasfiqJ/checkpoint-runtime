@@ -5,6 +5,10 @@ edition = "2021"
 description = "High-performance Rust data plane for checkpoint shard I/O"
 license = "MIT"
 
+[lib]
+name = "ckpt_dataplane"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ckpt-dataplane"
 path = "src/main.rs"
@@ -44,6 +48,9 @@ prometheus = "0.13"
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
+
+# Lazy statics for Prometheus metrics
+lazy_static = "1"
 
 # Utilities
 uuid = { version = "1", features = ["v4"] }
