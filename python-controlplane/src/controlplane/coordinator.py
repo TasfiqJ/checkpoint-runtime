@@ -321,6 +321,29 @@ class Coordinator:
         )
         return info
 
+    def update_checkpoint_metadata(
+        self,
+        checkpoint_id: str,
+        metadata: dict[str, str],
+        *,
+        merge: bool = True,
+    ) -> CheckpointInfo:
+        """Update metadata for a checkpoint."""
+        info = self.get_checkpoint(checkpoint_id)
+        if info is None:
+            raise KeyError(f"Checkpoint {checkpoint_id!r} not found")
+
+        if merge:
+            info.metadata.update(metadata)
+        else:
+            info.metadata = dict(metadata)
+
+        self._kv.put(
+            _checkpoint_key(checkpoint_id),
+            info.model_dump_json().encode(),
+        )
+        return info
+
     # -- worker management --------------------------------------------------
 
     def register_worker(

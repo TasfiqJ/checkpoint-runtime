@@ -1,32 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import type { MetricsSummary } from '../types';
 
-// ── Mock time-series generators (since API has no time-series endpoint) ──────
+// ── Types ────────────────────────────────────────────────────────────────────
 
-function generateLatencyData() {
-  const now = Date.now();
-  return Array.from({ length: 30 }, (_, i) => {
-    const t = new Date(now - (29 - i) * 60_000);
-    return {
-      time: t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
-      save: 2.5 + Math.sin(i * 0.4) * 0.8 + Math.random() * 0.5,
-      restore: 1.2 + Math.sin(i * 0.3 + 1) * 0.4 + Math.random() * 0.3,
-    };
-  });
+interface LatencyPoint {
+  index: number;
+  save: number;
+  restore: number;
 }
 
-function generateThroughputData() {
-  return Array.from({ length: 12 }, (_, i) => {
-    const t = new Date(Date.now() - (11 - i) * 300_000);
-    return {
-      time: t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
-      throughput: 3.0 + Math.random() * 2.5,
-    };
-  });
+interface PerformanceData {
+  latency: LatencyPoint[];
+  total_checkpoint_bytes: number;
+  checkpoint_count: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -81,14 +71,22 @@ function DarkTooltip({ active, payload, label }: CustomTooltipProps) {
 
 function PerformancePage() {
   const [metrics, setMetrics] = useState<MetricsSummary | null>(null);
+  const [perfData, setPerfData] = useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMetrics = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/metrics/summary');
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      setMetrics(await res.json());
+      const [metricsRes, perfRes] = await Promise.all([
+        fetch('/api/metrics/summary'),
+        fetch('/api/metrics/performance'),
+      ]);
+      if (!metricsRes.ok) throw new Error(`Metrics: ${metricsRes.status} ${metricsRes.statusText}`);
+      setMetrics(await metricsRes.json());
+
+      if (perfRes.ok) {
+        setPerfData(await perfRes.json());
+      }
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to fetch metrics');
@@ -98,19 +96,19 @@ function PerformancePage() {
   }, []);
 
   useEffect(() => {
-    fetchMetrics();
-    const id = setInterval(fetchMetrics, 10000);
+    fetchData();
+    const id = setInterval(fetchData, 10000);
     return () => clearInterval(id);
-  }, [fetchMetrics]);
-
-  const latencyData = useMemo(generateLatencyData, []);
-  const throughputData = useMemo(generateThroughputData, []);
+  }, [fetchData]);
 
   // ── Render ─────────────────────────────────────────────────────────────
 
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-gray-500 text-sm">Loading metrics...</div>;
   }
+
+  const latencyData = perfData?.latency ?? [];
+  const hasLatencyData = latencyData.length > 0;
 
   return (
     <div>
@@ -165,42 +163,55 @@ function PerformancePage() {
       {/* Latency chart */}
       <div className="bg-gray-900 rounded-lg border border-gray-800 p-6 mb-8">
         <h3 className="text-lg font-semibold text-gray-100 mb-4">Checkpoint Latency Over Time</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={latencyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-              <XAxis dataKey="time" tick={{ fill: '#6b7280', fontSize: 11 }} stroke="#374151" />
-              <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} stroke="#374151" unit="s" />
-              <Tooltip content={<DarkTooltip />} />
-              <Line type="monotone" dataKey="save" name="Save" stroke="#818cf8" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="restore" name="Restore" stroke="#34d399" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="flex items-center gap-6 mt-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-indigo-400 inline-block rounded" /> Save Latency
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-green-400 inline-block rounded" /> Restore Latency
-          </span>
-        </div>
+        {hasLatencyData ? (
+          <>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={latencyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis dataKey="index" tick={{ fill: '#6b7280', fontSize: 11 }} stroke="#374151" />
+                  <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} stroke="#374151" unit="s" />
+                  <Tooltip content={<DarkTooltip />} />
+                  <Line type="monotone" dataKey="save" name="Save" stroke="#818cf8" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="restore" name="Restore" stroke="#34d399" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex items-center gap-6 mt-3 text-xs text-gray-500">
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-0.5 bg-indigo-400 inline-block rounded" /> Save Latency
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-0.5 bg-green-400 inline-block rounded" /> Restore Latency
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="h-64 flex items-center justify-center text-gray-500 text-sm">
+            No checkpoint latency data yet. Trigger a checkpoint to see metrics.
+          </div>
+        )}
       </div>
 
-      {/* Throughput chart */}
+      {/* Throughput info */}
       <div className="bg-gray-900 rounded-lg border border-gray-800 p-6 mb-8">
-        <h3 className="text-lg font-semibold text-gray-100 mb-4">Throughput (GB/s)</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={throughputData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-              <XAxis dataKey="time" tick={{ fill: '#6b7280', fontSize: 11 }} stroke="#374151" />
-              <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} stroke="#374151" unit=" GB/s" />
-              <Tooltip content={<DarkTooltip />} />
-              <Bar dataKey="throughput" name="Throughput" fill="#818cf8" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <h3 className="text-lg font-semibold text-gray-100 mb-4">Throughput</h3>
+        {perfData && perfData.checkpoint_count > 0 ? (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-gray-400">Total Data Written</p>
+              <p className="text-2xl font-bold text-gray-100 mt-1">{formatBytes(perfData.total_checkpoint_bytes)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Checkpoints Completed</p>
+              <p className="text-2xl font-bold text-gray-100 mt-1">{perfData.checkpoint_count}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
+            No throughput data yet. Complete a checkpoint cycle to see metrics.
+          </div>
+        )}
       </div>
 
       {/* External links */}
@@ -241,16 +252,18 @@ function PerformancePage() {
         </a>
       </div>
 
-      {/* Resource utilisation */}
+      {/* Resource utilisation — from metrics summary */}
       <div className="bg-gray-900 rounded-lg border border-gray-800 p-6">
         <h3 className="text-lg font-semibold text-gray-100 mb-4">Resource Utilization</h3>
-        <div className="space-y-4">
-          <UtilBar label="CPU Usage"    pct={45} color="bg-indigo-500" />
-          <UtilBar label="Memory"       pct={68} color="bg-indigo-500" />
-          <UtilBar label="GPU Memory"   pct={72} color="bg-indigo-500" />
-          <UtilBar label="Network I/O"  pct={32} color="bg-indigo-500" />
-          <UtilBar label="Disk I/O"     pct={28} color="bg-indigo-500" />
-        </div>
+        {metrics ? (
+          <div className="space-y-4">
+            <UtilBar label="Workers Active" pct={metrics.total_workers > 0 ? Math.round((metrics.active_workers / metrics.total_workers) * 100) : 0} color="bg-indigo-500" />
+            <UtilBar label="Checkpoint Success" pct={Math.round(metrics.checkpoint_success_rate * 100)} color="bg-green-500" />
+            <UtilBar label="Active Runs" pct={metrics.total_runs > 0 ? Math.round((metrics.active_runs / metrics.total_runs) * 100) : 0} color="bg-indigo-500" />
+          </div>
+        ) : (
+          <div className="text-gray-500 text-sm">No resource data available.</div>
+        )}
       </div>
     </div>
   );

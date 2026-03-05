@@ -45,7 +45,6 @@ jobs:
             --set rustDataplane.image.repository=checkpoint-runtime/dataplane \
             --set rustDataplane.image.tag=dev \
             --wait --timeout 120s
-        continue-on-error: true
 
       - name: Verify pods
         run: |

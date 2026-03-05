@@ -1,5 +1,8 @@
 # Checkpoint Runtime
 
+![CI](https://github.com/TasfiqJ/checkpoint-runtime/actions/workflows/ci.yml/badge.svg)
+![Integration](https://github.com/TasfiqJ/checkpoint-runtime/actions/workflows/integration.yml/badge.svg)
+
 A fault-tolerant, high-throughput training checkpoint runtime with a Python control plane and Rust data plane.
 
 ## Why This Exists

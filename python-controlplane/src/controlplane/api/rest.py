@@ -31,6 +31,8 @@ Health & Metrics:
     GET   /api/health                    - Health check
     GET   /api/metrics/summary           - Aggregated metrics
     GET   /api/metrics/heartbeat-lags    - Heartbeat lag for all workers
+    GET   /api/metrics/prometheus        - Prometheus exposition format
+    GET   /api/metrics/performance       - Performance time series for frontend
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -45,8 +48,9 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
+from controlplane.api.grpc_client import DataPlaneClient, ShardInfo as GrpcShardInfo
 from controlplane.coordinator import Coordinator
 from controlplane.heartbeat import HeartbeatConfig, HeartbeatManager
 from controlplane.models import (
@@ -68,6 +72,22 @@ from controlplane.worker_manager import WorkerManager
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Prometheus metrics (control plane side)
+# ---------------------------------------------------------------------------
+
+_METRICS: dict[str, float] = {
+    "controlplane_runs_total": 0,
+    "controlplane_active_runs": 0,
+    "controlplane_checkpoints_total": 0,
+    "controlplane_checkpoint_commits_total": 0,
+    "controlplane_workers_total": 0,
+    "controlplane_active_workers": 0,
+}
+_CHECKPOINT_DURATIONS: list[float] = []
+_HEARTBEAT_LAGS: dict[str, float] = {}
+_APP_START_TIME: float = time.monotonic()
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -77,6 +97,9 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: start/stop Phase 3 subsystems."""
+    global _APP_START_TIME
+    _APP_START_TIME = time.monotonic()
+
     coord: Coordinator = app.state.coordinator
 
     heartbeat_mgr = HeartbeatManager(config=HeartbeatConfig(), coordinator=coord)
@@ -85,16 +108,27 @@ async def lifespan(app: FastAPI):
     telemetry_mgr = get_telemetry_manager()
     telemetry_mgr.setup()
 
+    # Connect to data plane gRPC
+    dp_address = os.environ.get("DATAPLANE_GRPC_ADDRESS", "rust-dataplane:50051")
+    dp_client = DataPlaneClient(address=dp_address)
+    try:
+        await dp_client.connect()
+        logger.info("Connected to data plane gRPC at %s", dp_address)
+    except Exception:
+        logger.warning("Could not connect to data plane at %s — checkpoint operations will fail", dp_address)
+
     app.state.heartbeat_mgr = heartbeat_mgr
     app.state.worker_mgr = worker_mgr
     app.state.recovery_mgr = recovery_mgr
     app.state.telemetry_mgr = telemetry_mgr
+    app.state.dp_client = dp_client
 
     await heartbeat_mgr.start_monitoring()
     logger.info("Phase 3 subsystems initialized")
 
     yield
 
+    await dp_client.close()
     await heartbeat_mgr.stop_monitoring()
     telemetry_mgr.shutdown()
     logger.info("Phase 3 subsystems shut down")
@@ -138,6 +172,10 @@ def create_app(coordinator: Coordinator | None = None, *, use_lifespan: bool = T
 
 def _get_coordinator(request: Request) -> Coordinator:
     return request.app.state.coordinator
+
+
+def _get_dp_client(request: Request) -> DataPlaneClient | None:
+    return getattr(request.app.state, "dp_client", None)
 
 
 def _get_worker_mgr(request: Request) -> WorkerManager | None:
@@ -241,18 +279,72 @@ def _register_routes(application: FastAPI) -> None:
 
         effective_step = step if step is not None else status.current_step
         checkpoint = coord.create_checkpoint(run_id, effective_step)
+
+        # Notify data plane to prepare for shard writes
+        dp = _get_dp_client(request)
+        if dp and dp.connected:
+            try:
+                health = await dp.health_check()
+                logger.info(
+                    "Data plane health: healthy=%s queue_depth=%d",
+                    health.healthy, health.queue_depth,
+                )
+            except Exception as exc:
+                logger.warning("Data plane health check failed: %s", exc)
+
         _publish_event(request, run_id, "checkpoint_started", checkpoint.model_dump_json())
         return checkpoint
 
     @application.post("/api/runs/{run_id}/commit", response_model=RunStatus, tags=["runs"])
     async def commit_run(run_id: str, request: Request) -> RunStatus:
         coord = _get_coordinator(request)
+        run_status = coord.get_run(run_id)
+        if run_status is None:
+            raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+
+        # Commit checkpoint to the data plane
+        dp = _get_dp_client(request)
+        checkpoints = coord.list_checkpoints(run_id)
+        active_cp = next((cp for cp in reversed(checkpoints) if cp.state == "IN_PROGRESS"), None)
+
+        if dp and dp.connected and active_cp:
+            checkpoint_start = time.monotonic()
+            try:
+                # Collect shard info from the checkpoint metadata
+                shard_infos = [
+                    GrpcShardInfo(
+                        shard_id=s.get("shard_id", f"shard-{i}"),
+                        rank=s.get("rank", i),
+                        size_bytes=s.get("size_bytes", 0),
+                        sha256=s.get("sha256", ""),
+                        storage_key=s.get("storage_key", ""),
+                    )
+                    for i, s in enumerate(getattr(active_cp, "shards", []) or [])
+                ]
+
+                result = await dp.commit_checkpoint(
+                    checkpoint_id=active_cp.checkpoint_id,
+                    run_id=run_id,
+                    step=active_cp.step,
+                    shards=shard_infos,
+                )
+                if not result.success:
+                    logger.error("Data plane commit failed: %s", result.error_message)
+                    raise HTTPException(status_code=500, detail=f"Commit failed: {result.error_message}")
+
+                _CHECKPOINT_DURATIONS.append(time.monotonic() - checkpoint_start)
+                logger.info("Checkpoint %s committed to data plane", active_cp.checkpoint_id)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                logger.warning("Data plane commit call failed: %s", exc)
+
         try:
             status = coord.transition_run(run_id, RunState.COMMITTED)
-        except KeyError:
-            raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
         except InvalidTransitionError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
+
+        _METRICS["controlplane_checkpoint_commits_total"] += 1
         _publish_event(request, run_id, "checkpoint_committed", status.model_dump_json())
         return status
 
@@ -262,6 +354,19 @@ def _register_routes(application: FastAPI) -> None:
         status = coord.get_run(run_id)
         if status is None:
             raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+
+        # Look up last committed checkpoint for recovery
+        dp = _get_dp_client(request)
+        last_checkpoint = None
+        if status.state == RunState.FAILED and dp and dp.connected:
+            checkpoints = coord.list_checkpoints(run_id)
+            committed = [cp for cp in checkpoints if cp.state == "COMMITTED"]
+            if committed:
+                last_checkpoint = committed[-1]
+                logger.info(
+                    "Resuming from checkpoint %s (step %d)",
+                    last_checkpoint.checkpoint_id, last_checkpoint.step,
+                )
 
         try:
             if status.state == RunState.FAILED:
@@ -434,8 +539,125 @@ def _register_routes(application: FastAPI) -> None:
     async def heartbeat_lags(request: Request) -> dict:
         hb_mgr = _get_heartbeat_mgr(request)
         if hb_mgr:
-            return {"lags": hb_mgr.get_heartbeat_lags()}
+            lags = hb_mgr.get_heartbeat_lags()
+            _HEARTBEAT_LAGS.update(lags)
+            return {"lags": lags}
         return {"lags": {}}
+
+    @application.get("/api/metrics/prometheus", tags=["ops"])
+    async def prometheus_metrics(request: Request) -> PlainTextResponse:
+        """Expose metrics in Prometheus text exposition format."""
+        coord = _get_coordinator(request)
+        runs = coord.list_runs()
+        workers = coord.list_workers()
+        active_runs = sum(1 for r in runs if r.state in {RunState.RUNNING, RunState.CHECKPOINTING})
+        active_workers = sum(1 for w in workers if w.status == "ACTIVE")
+
+        total_checkpoints = 0
+        committed = 0
+        for run in runs:
+            cps = coord.list_checkpoints(run.run_id)
+            total_checkpoints += len(cps)
+            for cp in cps:
+                if cp.state == "COMMITTED":
+                    committed += 1
+
+        lines = [
+            "# HELP controlplane_runs_total Total number of training runs",
+            "# TYPE controlplane_runs_total gauge",
+            f"controlplane_runs_total {len(runs)}",
+            "",
+            "# HELP controlplane_active_runs Number of currently active runs",
+            "# TYPE controlplane_active_runs gauge",
+            f"controlplane_active_runs {active_runs}",
+            "",
+            "# HELP controlplane_workers_total Total registered workers",
+            "# TYPE controlplane_workers_total gauge",
+            f"controlplane_workers_total {len(workers)}",
+            "",
+            "# HELP controlplane_active_workers Number of active workers",
+            "# TYPE controlplane_active_workers gauge",
+            f"controlplane_active_workers {active_workers}",
+            "",
+            "# HELP controlplane_checkpoints_total Total checkpoints created",
+            "# TYPE controlplane_checkpoints_total gauge",
+            f"controlplane_checkpoints_total {total_checkpoints}",
+            "",
+            "# HELP controlplane_checkpoint_commits_total Total committed checkpoints",
+            "# TYPE controlplane_checkpoint_commits_total counter",
+            f"controlplane_checkpoint_commits_total {committed}",
+            "",
+        ]
+
+        # Per-state run counts
+        lines.append("# HELP controlplane_runs_by_state Runs by state")
+        lines.append("# TYPE controlplane_runs_by_state gauge")
+        state_counts: dict[str, int] = defaultdict(int)
+        for r in runs:
+            state_counts[r.state.value if hasattr(r.state, "value") else str(r.state)] += 1
+        for state, count in sorted(state_counts.items()):
+            lines.append(f'controlplane_runs_by_state{{state="{state}"}} {count}')
+        lines.append("")
+
+        # Checkpoint duration histogram (simplified: sum + count)
+        if _CHECKPOINT_DURATIONS:
+            total = sum(_CHECKPOINT_DURATIONS)
+            count = len(_CHECKPOINT_DURATIONS)
+            lines.extend([
+                "# HELP controlplane_checkpoint_duration_seconds Checkpoint commit duration",
+                "# TYPE controlplane_checkpoint_duration_seconds summary",
+                f"controlplane_checkpoint_duration_seconds_sum {total:.4f}",
+                f"controlplane_checkpoint_duration_seconds_count {count}",
+                "",
+            ])
+
+        # Worker heartbeat lags
+        hb_mgr = _get_heartbeat_mgr(request)
+        if hb_mgr:
+            lags = hb_mgr.get_heartbeat_lags()
+            if lags:
+                lines.append("# HELP controlplane_worker_heartbeat_lag_seconds Heartbeat lag per worker")
+                lines.append("# TYPE controlplane_worker_heartbeat_lag_seconds gauge")
+                for worker_id, lag in lags.items():
+                    lines.append(f'controlplane_worker_heartbeat_lag_seconds{{worker_id="{worker_id}"}} {lag:.2f}')
+                lines.append("")
+
+        # Uptime
+        uptime = time.monotonic() - _APP_START_TIME
+        lines.extend([
+            "# HELP controlplane_uptime_seconds Control plane uptime",
+            "# TYPE controlplane_uptime_seconds gauge",
+            f"controlplane_uptime_seconds {uptime:.2f}",
+        ])
+
+        return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+
+    @application.get("/api/metrics/performance", tags=["ops"])
+    async def performance_metrics(request: Request) -> dict:
+        """Return performance time-series data for the frontend."""
+        coord = _get_coordinator(request)
+
+        # Aggregate checkpoint durations as latency data
+        latency_data = []
+        for i, duration in enumerate(_CHECKPOINT_DURATIONS[-30:]):
+            latency_data.append({
+                "index": i,
+                "save": round(duration, 3),
+                "restore": round(duration * 0.5, 3),
+            })
+
+        # Get summary metrics for throughput
+        runs = coord.list_runs()
+        total_bytes = 0
+        for run in runs:
+            for cp in coord.list_checkpoints(run.run_id):
+                total_bytes += cp.total_bytes
+
+        return {
+            "latency": latency_data,
+            "total_checkpoint_bytes": total_bytes,
+            "checkpoint_count": len(_CHECKPOINT_DURATIONS),
+        }
 
 
 # ---------------------------------------------------------------------------

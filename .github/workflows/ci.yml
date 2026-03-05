@@ -11,7 +11,7 @@ env:
 
 jobs:
   rust:
-    name: Rust (build)
+    name: Rust (build + lint + test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,15 +29,19 @@ jobs:
 
       - name: Check formatting
         working-directory: rust-dataplane
-        run: cargo fmt --check || true
+        run: cargo fmt --check
 
       - name: Clippy
         working-directory: rust-dataplane
-        run: cargo clippy --lib --bins -- -D warnings || true
+        run: cargo clippy --lib --bins -- -D warnings
 
       - name: Build
         working-directory: rust-dataplane
         run: cargo build --lib --bins
+
+      - name: Test
+        working-directory: rust-dataplane
+        run: cargo test
 
   python:
     name: Python (lint + test)
@@ -57,18 +61,18 @@ jobs:
 
       - name: Ruff lint
         working-directory: python-controlplane
-        run: ruff check src/ tests/ || true
+        run: ruff check src/ tests/
 
       - name: Mypy
         working-directory: python-controlplane
-        run: mypy src/ --ignore-missing-imports || true
+        run: mypy src/ --ignore-missing-imports
 
       - name: Pytest
         working-directory: python-controlplane
         run: PYTHONPATH=src python -m pytest tests/ -v --tb=short
 
   frontend:
-    name: Frontend (lint + typecheck)
+    name: Frontend (lint + typecheck + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,12 +87,12 @@ jobs:
 
       - name: TypeScript check
         working-directory: frontend
-        run: npx tsc --noEmit || true
+        run: npm run typecheck
 
       - name: ESLint
         working-directory: frontend
-        run: npx eslint src/ --ext .ts,.tsx || true
+        run: npx eslint src/ --ext .ts,.tsx
 
       - name: Build
         working-directory: frontend
-        run: npm run build || true
+        run: npm run build

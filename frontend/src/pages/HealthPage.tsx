@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
+import { useState, useEffect, useCallback } from 'react';
 import type { HealthStatus, HealthLevel, WorkerInfo } from '../types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -39,27 +38,14 @@ function formatTime(iso: string): string {
   }
 }
 
-// ── Sparkline: generates mock error-rate data and renders a mini line ──────
+// ── Lag indicator bar ────────────────────────────────────────────────────────
 
-function ErrorSparkline({ workerId }: { workerId: string }) {
-  // Generate deterministic-ish mock data based on worker id
-  const data = useMemo(() => {
-    let seed = 0;
-    for (let i = 0; i < workerId.length; i++) seed += workerId.charCodeAt(i);
-    return Array.from({ length: 20 }, (_, i) => {
-      const noise = Math.sin(seed * (i + 1)) * 0.5 + 0.5;
-      return { v: Math.max(0, noise * 3 + Math.random() * 1.5) };
-    });
-  }, [workerId]);
-
+function LagIndicator({ lag }: { lag: number }) {
+  const pct = Math.min(100, (lag / 60) * 100);
+  const color = lag < 5 ? 'bg-green-500' : lag < 30 ? 'bg-yellow-500' : 'bg-red-500';
   return (
-    <div className="h-8 w-24">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <YAxis domain={[0, 'auto']} hide />
-          <Line type="monotone" dataKey="v" stroke="#ef4444" strokeWidth={1.5} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="h-1.5 w-24 bg-gray-800 rounded-full overflow-hidden">
+      <div className={`h-1.5 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -87,7 +73,8 @@ function HealthPage() {
 
       setHealth(await healthRes.json());
       setWorkers(await workersRes.json());
-      setLags(await lagsRes.json());
+      const lagsData = await lagsRes.json();
+      setLags(lagsData.lags ?? lagsData);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to fetch health data');
@@ -210,10 +197,10 @@ function HealthPage() {
                 </div>
               </div>
 
-              {/* Error sparkline */}
+              {/* Heartbeat lag indicator */}
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-gray-500">Error rate</span>
-                <ErrorSparkline workerId={w.worker_id} />
+                <span className="text-xs text-gray-500">Heartbeat lag</span>
+                <LagIndicator lag={lag} />
               </div>
             </div>
           );

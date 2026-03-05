@@ -12,6 +12,7 @@ use crate::checkpoint::reader::ShardReader;
 use crate::checkpoint::writer::ShardWriter;
 use crate::config::Config;
 use crate::metrics;
+use crate::retry::RetryPolicy;
 use crate::storage::checksum::StreamingChecksum;
 use crate::storage::s3::S3Client;
 
@@ -39,6 +40,16 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
         &self,
         request: Request<Streaming<proto::ShardChunk>>,
     ) -> Result<Response<proto::WriteShardResponse>, Status> {
+        // Check backpressure before accepting work
+        if self.backpressure.depth() >= self.backpressure.max_depth() {
+            metrics::GRPC_REQUESTS_TOTAL
+                .with_label_values(&["write_shard", "ERROR"])
+                .inc();
+            return Err(Status::resource_exhausted(
+                "Backpressure queue full — try again later",
+            ));
+        }
+
         let start = std::time::Instant::now();
         let mut stream = request.into_inner();
         let mut chunks: Vec<Bytes> = Vec::new();
@@ -54,7 +65,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                 self.backpressure.decrement();
                 metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
                 metrics::SHARD_WRITES_TOTAL.with_label_values(&["error"]).inc();
-                metrics::GRPC_REQUESTS_TOTAL.with_label_values(&["write_shard", "error"]).inc();
+                metrics::GRPC_REQUESTS_TOTAL.with_label_values(&["write_shard", "ERROR"]).inc();
                 Status::internal(format!("Stream error: {}", e))
             })?;
 
@@ -76,11 +87,24 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             .unwrap_or("unknown")
             .to_string();
 
-        match self
-            .writer
-            .write_shard(&run_id, &checkpoint_id, &shard_id, chunks)
-            .await
-        {
+        // Write shard with retry for transient S3 failures
+        let writer = self.writer.clone();
+        let run_id_clone = run_id.clone();
+        let checkpoint_id_clone = checkpoint_id.clone();
+        let shard_id_clone = shard_id.clone();
+        let retry = RetryPolicy::new(3, 500);
+        let result = retry
+            .execute(|| {
+                let w = writer.clone();
+                let rid = run_id_clone.clone();
+                let cid = checkpoint_id_clone.clone();
+                let sid = shard_id_clone.clone();
+                let c = chunks.clone();
+                async move { w.write_shard(&rid, &cid, &sid, c).await }
+            })
+            .await;
+
+        match result {
             Ok(result) => {
                 self.backpressure.decrement();
                 metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
@@ -92,7 +116,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                     .with_label_values(&["success"])
                     .observe(start.elapsed().as_secs_f64());
                 metrics::GRPC_REQUESTS_TOTAL
-                    .with_label_values(&["write_shard", "ok"])
+                    .with_label_values(&["write_shard", "OK"])
                     .inc();
 
                 Ok(Response::new(proto::WriteShardResponse {
@@ -110,7 +134,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                     .with_label_values(&["error"])
                     .observe(start.elapsed().as_secs_f64());
                 metrics::GRPC_REQUESTS_TOTAL
-                    .with_label_values(&["write_shard", "error"])
+                    .with_label_values(&["write_shard", "ERROR"])
                     .inc();
                 error!(error = %e, "Failed to write shard");
                 Err(Status::internal(format!("Write failed: {}", e)))
@@ -129,9 +153,43 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
         let start = std::time::Instant::now();
         let req = request.into_inner();
         let reader = self.reader.clone();
+        let manifest_mgr = self.manifest_mgr.clone();
+
+        // Look up storage_key from the manifest
+        let manifest = manifest_mgr
+            .read_manifest(&req.run_id, &req.checkpoint_id)
+            .await
+            .map_err(|e| {
+                metrics::GRPC_REQUESTS_TOTAL
+                    .with_label_values(&["read_shard", "ERROR"])
+                    .inc();
+                Status::internal(format!("Failed to read manifest: {}", e))
+            })?
+            .ok_or_else(|| {
+                metrics::GRPC_REQUESTS_TOTAL
+                    .with_label_values(&["read_shard", "ERROR"])
+                    .inc();
+                Status::not_found(format!(
+                    "Manifest not found for run={} checkpoint={}",
+                    req.run_id, req.checkpoint_id
+                ))
+            })?;
+
+        let shard_meta = manifest
+            .shards
+            .iter()
+            .find(|s| s.shard_id == req.shard_id)
+            .ok_or_else(|| {
+                metrics::GRPC_REQUESTS_TOTAL
+                    .with_label_values(&["read_shard", "ERROR"])
+                    .inc();
+                Status::not_found(format!("Shard {} not found in manifest", req.shard_id))
+            })?;
+
+        let storage_key = shard_meta.storage_key.clone();
 
         let chunks = reader
-            .read_shard(&req.run_id, &req.checkpoint_id, &req.shard_id, 4 * 1024 * 1024)
+            .read_shard(&storage_key, 4 * 1024 * 1024)
             .await
             .map_err(|e| {
                 metrics::SHARD_READS_TOTAL.with_label_values(&["error"]).inc();
@@ -139,7 +197,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                     .with_label_values(&["error"])
                     .observe(start.elapsed().as_secs_f64());
                 metrics::GRPC_REQUESTS_TOTAL
-                    .with_label_values(&["read_shard", "error"])
+                    .with_label_values(&["read_shard", "ERROR"])
                     .inc();
                 Status::internal(format!("Read failed: {}", e))
             })?;
@@ -149,7 +207,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             .with_label_values(&["success"])
             .observe(start.elapsed().as_secs_f64());
         metrics::GRPC_REQUESTS_TOTAL
-            .with_label_values(&["read_shard", "ok"])
+            .with_label_values(&["read_shard", "OK"])
             .inc();
 
         let total_chunks = chunks.len();
@@ -187,6 +245,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                 rank: s.rank,
                 size_bytes: s.size_bytes,
                 sha256: s.sha256.clone(),
+                storage_key: s.storage_key.clone(),
             })
             .collect();
 
@@ -210,7 +269,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                     .with_label_values(&["success"])
                     .observe(start.elapsed().as_secs_f64());
                 metrics::GRPC_REQUESTS_TOTAL
-                    .with_label_values(&["commit_checkpoint", "ok"])
+                    .with_label_values(&["commit_checkpoint", "OK"])
                     .inc();
                 info!(
                     checkpoint_id = %req.checkpoint_id,
@@ -229,7 +288,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                     .with_label_values(&["error"])
                     .observe(start.elapsed().as_secs_f64());
                 metrics::GRPC_REQUESTS_TOTAL
-                    .with_label_values(&["commit_checkpoint", "error"])
+                    .with_label_values(&["commit_checkpoint", "ERROR"])
                     .inc();
                 error!(error = %e, "Failed to commit checkpoint");
                 Ok(Response::new(proto::CommitResponse {
@@ -259,7 +318,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                     .with_label_values(&["abort"])
                     .inc_by(deleted as f64);
                 metrics::GRPC_REQUESTS_TOTAL
-                    .with_label_values(&["abort_checkpoint", "ok"])
+                    .with_label_values(&["abort_checkpoint", "OK"])
                     .inc();
                 Ok(Response::new(proto::AbortResponse {
                     success: true,
@@ -269,7 +328,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             Err(e) => {
                 metrics::CHECKPOINT_ABORTS_TOTAL.with_label_values(&["error"]).inc();
                 metrics::GRPC_REQUESTS_TOTAL
-                    .with_label_values(&["abort_checkpoint", "error"])
+                    .with_label_values(&["abort_checkpoint", "ERROR"])
                     .inc();
                 error!(error = %e, "Failed to abort checkpoint");
                 Err(Status::internal(format!("Abort failed: {}", e)))
@@ -284,7 +343,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
     ) -> Result<Response<proto::ShardStatusResponse>, Status> {
         let req = request.into_inner();
         metrics::GRPC_REQUESTS_TOTAL
-            .with_label_values(&["get_shard_status", "ok"])
+            .with_label_values(&["get_shard_status", "OK"])
             .inc();
         Ok(Response::new(proto::ShardStatusResponse {
             shard_id: req.shard_id,
@@ -300,7 +359,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
         _request: Request<proto::HealthRequest>,
     ) -> Result<Response<proto::HealthResponse>, Status> {
         metrics::GRPC_REQUESTS_TOTAL
-            .with_label_values(&["health_check", "ok"])
+            .with_label_values(&["health_check", "OK"])
             .inc();
         Ok(Response::new(proto::HealthResponse {
             serving: true,

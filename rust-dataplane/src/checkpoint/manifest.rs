@@ -23,6 +23,7 @@ pub struct ManifestShard {
     pub rank: u32,
     pub size_bytes: u64,
     pub sha256: String,
+    pub storage_key: String,
 }
 
 pub struct ManifestManager {

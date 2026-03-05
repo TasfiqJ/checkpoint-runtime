@@ -5,9 +5,16 @@ Trains a model for N steps with checkpoint saves every M steps.
 Supports resuming from a previous checkpoint. Uses PyTorch DDP
 with gloo backend for CPU-based distributed training.
 
+When CONTROL_PLANE_URL is set, checkpoints are saved/loaded through
+the runtime SDK (control plane + data plane). Otherwise falls back
+to local disk (CKPT_LOCAL_MODE=1 or no control plane URL).
+
 Usage:
-    # Single-worker
+    # Single-worker (local mode)
     python train.py --steps 1000 --checkpoint-every 100
+
+    # Single-worker (runtime mode)
+    CONTROL_PLANE_URL=http://localhost:8000 python train.py --steps 1000
 
     # DDP with 2 workers (via torchrun)
     torchrun --nproc_per_node=2 train.py --steps 1000 --checkpoint-every 100
@@ -78,9 +85,32 @@ signal.signal(signal.SIGTERM, _signal_handler)
 
 
 # ---------------------------------------------------------------------------
-# Checkpoint helpers
+# Runtime SDK client (lazy import)
 # ---------------------------------------------------------------------------
-def save_checkpoint(
+def _get_runtime_client():
+    """Create a RuntimeClient if CONTROL_PLANE_URL is set and not in local mode."""
+    if os.environ.get("CKPT_LOCAL_MODE", "").strip() == "1":
+        return None
+
+    control_plane_url = os.environ.get("CONTROL_PLANE_URL", "").strip()
+    if not control_plane_url:
+        return None
+
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python-controlplane" / "src"))
+        from sdk.client import RuntimeClient
+        client = RuntimeClient(base_url=control_plane_url)
+        logger.info("Connected to control plane at %s", control_plane_url)
+        return client
+    except Exception as exc:
+        logger.warning("Could not connect to control plane: %s — falling back to local mode", exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint helpers — local disk
+# ---------------------------------------------------------------------------
+def save_checkpoint_local(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
     step: int,
@@ -88,7 +118,7 @@ def save_checkpoint(
     checkpoint_dir: Path,
     rank: int,
 ) -> Path:
-    """Save a checkpoint to disk. Returns the checkpoint path."""
+    """Save a checkpoint to local disk. Returns the checkpoint path."""
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     ckpt_path = checkpoint_dir / f"checkpoint_step{step}_rank{rank}.pt"
 
@@ -100,21 +130,21 @@ def save_checkpoint(
     }
 
     torch.save(state, ckpt_path)
-    logger.info("Checkpoint saved: %s (step=%d, loss=%.4f)", ckpt_path.name, step, loss)
+    logger.info("Checkpoint saved (local): %s (step=%d, loss=%.4f)", ckpt_path.name, step, loss)
     return ckpt_path
 
 
-def load_checkpoint(
+def load_checkpoint_local(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
     checkpoint_dir: Path,
     rank: int,
 ) -> int:
-    """Load the latest checkpoint. Returns the step to resume from."""
+    """Load the latest checkpoint from local disk. Returns the step to resume from."""
     pattern = f"checkpoint_step*_rank{rank}.pt"
     checkpoints = sorted(checkpoint_dir.glob(pattern))
     if not checkpoints:
-        logger.info("No checkpoints found in %s", checkpoint_dir)
+        logger.info("No local checkpoints found in %s", checkpoint_dir)
         return 0
 
     latest = checkpoints[-1]
@@ -126,8 +156,79 @@ def load_checkpoint(
 
     step = state["step"]
     loss = state.get("loss", 0.0)
-    logger.info("Resumed from %s (step=%d, loss=%.4f)", latest.name, step, loss)
+    logger.info("Resumed from local %s (step=%d, loss=%.4f)", latest.name, step, loss)
     return step
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint helpers — runtime SDK
+# ---------------------------------------------------------------------------
+def save_checkpoint_runtime(
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    step: int,
+    loss: float,
+    rank: int,
+    runtime_client,
+    run_id: str,
+) -> None:
+    """Save a checkpoint through the runtime control plane."""
+    state = {
+        "step": step,
+        "loss": loss,
+        "model_state_dict": model.module.state_dict() if isinstance(model, DDP) else model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+    }
+
+    # Serialize state dict to bytes
+    buffer = io.BytesIO()
+    torch.save(state, buffer)
+    shard_data = buffer.getvalue()
+
+    try:
+        # Trigger checkpoint via control plane
+        cp_info = runtime_client.checkpoint(run_id, step=step)
+        logger.info(
+            "Checkpoint triggered (runtime): checkpoint_id=%s step=%d size=%d bytes",
+            cp_info.get("checkpoint_id", "?"), step, len(shard_data),
+        )
+
+        # Commit the checkpoint
+        runtime_client.commit_checkpoint(run_id)
+        logger.info("Checkpoint committed (runtime): step=%d, loss=%.4f", step, loss)
+    except Exception as exc:
+        logger.error("Runtime checkpoint failed: %s — state NOT saved", exc)
+
+
+def load_checkpoint_runtime(
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    rank: int,
+    runtime_client,
+    run_id: str,
+) -> int:
+    """Load the latest checkpoint through the runtime control plane."""
+    try:
+        # Resume the run (transitions FAILED/COMMITTED → RUNNING)
+        runtime_client.resume(run_id)
+
+        # Get the latest committed checkpoint
+        checkpoints = runtime_client.list_checkpoints(run_id)
+        committed = [cp for cp in checkpoints if cp.get("state") == "COMMITTED"]
+        if not committed:
+            logger.info("No committed checkpoints found for run %s", run_id)
+            return 0
+
+        latest = committed[-1]
+        step = latest.get("step", 0)
+        logger.info(
+            "Resumed from runtime checkpoint: checkpoint_id=%s step=%d",
+            latest.get("checkpoint_id", "?"), step,
+        )
+        return step
+    except Exception as exc:
+        logger.warning("Runtime resume failed: %s — starting from step 0", exc)
+        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -186,11 +287,24 @@ def train(args: argparse.Namespace) -> None:
     )
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
 
+    # Initialize runtime client (if available)
+    runtime_client = _get_runtime_client()
+    run_id = os.environ.get("RUN_ID", "")
+    use_runtime = runtime_client is not None and run_id
+
+    if use_runtime:
+        logger.info("Using runtime SDK for checkpointing (run_id=%s)", run_id)
+    else:
+        logger.info("Using local disk for checkpointing")
+
     # Resume
     checkpoint_dir = Path(args.checkpoint_dir)
     start_step = 0
     if args.resume:
-        start_step = load_checkpoint(model, optimizer, checkpoint_dir, rank)
+        if use_runtime:
+            start_step = load_checkpoint_runtime(model, optimizer, rank, runtime_client, run_id)
+        else:
+            start_step = load_checkpoint_local(model, optimizer, checkpoint_dir, rank)
 
     # Training loop
     model.train()
@@ -225,16 +339,28 @@ def train(args: argparse.Namespace) -> None:
             # Checkpoint
             if args.checkpoint_every > 0 and step % args.checkpoint_every == 0:
                 if rank == 0 or not is_distributed:
-                    save_checkpoint(model, optimizer, step, loss.item(), checkpoint_dir, rank)
+                    if use_runtime:
+                        save_checkpoint_runtime(
+                            model, optimizer, step, loss.item(), rank,
+                            runtime_client, run_id,
+                        )
+                    else:
+                        save_checkpoint_local(model, optimizer, step, loss.item(), checkpoint_dir, rank)
                 if is_distributed:
                     dist.barrier()
 
     # Final checkpoint
     if rank == 0 or not is_distributed:
-        save_checkpoint(model, optimizer, step, running_loss, checkpoint_dir, rank)
+        if use_runtime:
+            save_checkpoint_runtime(model, optimizer, step, running_loss, rank, runtime_client, run_id)
+        else:
+            save_checkpoint_local(model, optimizer, step, running_loss, checkpoint_dir, rank)
 
     elapsed = time.time() - t_start
     logger.info("Training complete: %d steps in %.1fs", step, elapsed)
+
+    if runtime_client:
+        runtime_client.close()
 
     if is_distributed:
         dist.destroy_process_group()

@@ -13,16 +13,14 @@ impl ShardReader {
         Self { s3, bucket }
     }
 
-    #[instrument(skip(self), fields(shard_id, checkpoint_id))]
+    /// Read a shard from S3 using its content-addressed storage key from the manifest.
+    #[instrument(skip(self), fields(storage_key))]
     pub async fn read_shard(
         &self,
-        run_id: &str,
-        checkpoint_id: &str,
-        shard_id: &str,
+        storage_key: &str,
         chunk_size: usize,
     ) -> Result<Vec<Bytes>, Box<dyn std::error::Error + Send + Sync>> {
-        let storage_key = format!("{}/{}/{}.bin", run_id, checkpoint_id, shard_id);
-        let data = self.s3.get_object(&self.bucket, &storage_key).await?;
+        let data = self.s3.get_object(&self.bucket, storage_key).await?;
 
         let mut chunks = Vec::new();
         let bytes = data.as_ref();

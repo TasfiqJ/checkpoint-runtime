@@ -3,10 +3,6 @@
 Provides a typed async interface over the ``CheckpointService`` defined in
 ``proto/checkpoint.proto``.  The client handles connection management,
 streaming uploads/downloads, and health checks.
-
-When the generated protobuf stubs are not available the module exposes
-a stub-free interface that raises ``NotImplementedError`` on every call,
-allowing the rest of the control plane to start without the data plane.
 """
 
 from __future__ import annotations
@@ -66,9 +62,8 @@ class AbortResult:
 class DataPlaneHealth:
     healthy: bool
     queue_depth: int = 0
-    memory_bytes: int = 0
+    memory_used_bytes: int = 0
     active_uploads: int = 0
-    version: str = ""
 
 
 class DataPlaneClient:
@@ -83,16 +78,8 @@ class DataPlaneClient:
     async def connect(self) -> None:
         try:
             self._channel = grpc.aio.insecure_channel(self._address)
-            try:
-                from controlplane.generated import checkpoint_pb2_grpc
-                self._stub = checkpoint_pb2_grpc.CheckpointServiceStub(self._channel)
-            except ImportError:
-                logger.warning(
-                    "Generated gRPC stubs not found. Run generate_proto.py to generate them. "
-                    "The client will operate in stub-less mode."
-                )
-                self._stub = None
-
+            from controlplane.generated import checkpoint_pb2_grpc
+            self._stub = checkpoint_pb2_grpc.CheckpointServiceStub(self._channel)
             self._connected = True
             logger.info("Connected to data plane at %s", self._address)
         except Exception as exc:
@@ -131,7 +118,7 @@ class DataPlaneClient:
             total_bytes=response.total_bytes,
             sha256_checksum=response.sha256_checksum,
             success=response.success,
-            error_message=response.error_message,
+            error_message=getattr(response, "error_message", ""),
         )
 
     async def read_shard(
@@ -192,7 +179,7 @@ class DataPlaneClient:
         return AbortResult(
             success=response.success,
             shards_deleted=response.shards_deleted,
-            error_message=response.error_message,
+            error_message=getattr(response, "error_message", ""),
         )
 
     async def health_check(self) -> DataPlaneHealth:
@@ -202,17 +189,15 @@ class DataPlaneClient:
         request = checkpoint_pb2.HealthRequest()
         response = await self._stub.HealthCheck(request)
 
-        healthy = response.status in (0, 1)
         return DataPlaneHealth(
-            healthy=healthy,
+            healthy=response.serving,
             queue_depth=response.queue_depth,
-            memory_bytes=response.memory_bytes,
+            memory_used_bytes=response.memory_used_bytes,
             active_uploads=response.active_uploads,
-            version=response.version,
         )
 
     def _ensure_stub(self) -> None:
         if self._stub is None:
-            raise NotImplementedError(
-                "gRPC stubs are not available. Run generate_proto.py to generate them."
+            raise ConnectionError(
+                "Not connected to data plane. Call connect() first."
             )
