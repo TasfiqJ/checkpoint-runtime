@@ -1,12 +1,12 @@
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.93-bookworm AS builder
 
 # protoc is required by prost-build >= 0.13
 RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy proto files first (for build.rs)
-COPY proto/ /app/proto/
+# Copy proto files to /proto so ../proto resolves from /app workdir
+COPY proto/ /proto/
 
 # Copy manifest and lock
 COPY rust-dataplane/Cargo.toml rust-dataplane/Cargo.lock* rust-dataplane/build.rs ./
