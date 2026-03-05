@@ -1,137 +1,241 @@
-"""OpenTelemetry instrumentation setup for the control plane.
+"""OpenTelemetry instrumentation for the checkpoint runtime control plane.
 
-Provides helpers for initialising tracing, metrics, and logging exporters
-that ship data to an OTLP-compatible backend (e.g. Jaeger, Grafana Tempo).
+Sets up:
+- **Traces**: Distributed tracing with OTLP exporter.
+- **Metrics**: Runtime metrics (run counts, checkpoint durations, etc.).
 
-This is a placeholder; the real setup will configure resource attributes,
-span processors, and metric readers.
+Environment variables:
+    OTEL_EXPORTER_OTLP_ENDPOINT  — OTLP collector endpoint (default http://localhost:4317).
+    OTEL_SERVICE_NAME             — Service name (default checkpoint-controlplane).
+    OTEL_ENABLED                  — Set to "false" to disable telemetry.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import os
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class TelemetryConfig:
-    """Configuration for the telemetry subsystem."""
-
-    service_name: str = "checkpoint-controlplane"
-    otlp_endpoint: str = "http://localhost:4317"
-    enable_tracing: bool = True
-    enable_metrics: bool = True
-    enable_logging: bool = True
-    sample_rate: float = 1.0  # 0.0 - 1.0
+_OTEL_ENABLED = os.environ.get("OTEL_ENABLED", "true").lower() != "false"
+_SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "checkpoint-controlplane")
+_OTLP_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
 
 class TelemetryManager:
-    """Bootstrap and manage OpenTelemetry providers.
+    """Manages the lifecycle of OpenTelemetry providers."""
 
-    Usage::
-
-        mgr = TelemetryManager(TelemetryConfig())
-        mgr.setup()
-        # ... application runs ...
-        mgr.shutdown()
-    """
-
-    def __init__(self, config: TelemetryConfig | None = None) -> None:
-        self._config = config or TelemetryConfig()
-        self._tracer_provider = None
-        self._meter_provider = None
-        self._initialized = False
-
-    # -- setup / teardown -----------------------------------------------------
+    def __init__(
+        self,
+        service_name: str = _SERVICE_NAME,
+        otlp_endpoint: str = _OTLP_ENDPOINT,
+        enabled: bool = _OTEL_ENABLED,
+    ) -> None:
+        self.service_name = service_name
+        self.otlp_endpoint = otlp_endpoint
+        self.enabled = enabled
+        self._tracer_provider: Any = None
+        self._meter_provider: Any = None
+        self._tracer: Any = None
+        self._meter: Any = None
+        self.run_created_counter: Any = None
+        self.checkpoint_duration_histogram: Any = None
+        self.active_runs_gauge: Any = None
+        self.checkpoint_bytes_counter: Any = None
 
     def setup(self) -> None:
-        """Initialise OTel providers and exporters.
-
-        TODO: Wire up real providers:
-        - TracerProvider with BatchSpanProcessor + OTLPSpanExporter
-        - MeterProvider with PeriodicExportingMetricReader + OTLPMetricExporter
-        - LoggerProvider with BatchLogRecordProcessor + OTLPLogExporter
-        """
-        if self._initialized:
-            logger.warning("Telemetry already initialised; skipping")
+        """Initialise OpenTelemetry providers and instruments."""
+        if not self.enabled:
+            logger.info("OpenTelemetry is disabled (OTEL_ENABLED=false)")
+            self._setup_noop()
             return
 
-        logger.info(
-            "Initialising telemetry: service=%s endpoint=%s",
-            self._config.service_name,
-            self._config.otlp_endpoint,
-        )
-
-        if self._config.enable_tracing:
-            self._setup_tracing()
-
-        if self._config.enable_metrics:
-            self._setup_metrics()
-
-        if self._config.enable_logging:
-            self._setup_logging()
-
-        self._initialized = True
-        logger.info("Telemetry initialised successfully")
+        try:
+            self._setup_real()
+            logger.info(
+                "OpenTelemetry initialised: service=%s endpoint=%s",
+                self.service_name,
+                self.otlp_endpoint,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to initialise OpenTelemetry — falling back to no-op",
+                exc_info=True,
+            )
+            self._setup_noop()
 
     def shutdown(self) -> None:
-        """Flush pending spans / metrics and shut down providers."""
-        if not self._initialized:
+        """Flush and shut down all providers."""
+        if self._tracer_provider is not None:
+            try:
+                self._tracer_provider.shutdown()
+            except Exception:
+                logger.debug("Tracer provider shutdown error", exc_info=True)
+        if self._meter_provider is not None:
+            try:
+                self._meter_provider.shutdown()
+            except Exception:
+                logger.debug("Meter provider shutdown error", exc_info=True)
+
+    def get_tracer(self, name: str = "controlplane") -> Any:
+        if self._tracer_provider is None:
+            self.setup()
+        return self._tracer_provider.get_tracer(name)
+
+    def get_meter(self, name: str = "controlplane") -> Any:
+        if self._meter_provider is None:
+            self.setup()
+        return self._meter_provider.get_meter(name)
+
+    def _setup_real(self) -> None:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        resource = Resource.create({"service.name": self.service_name})
+
+        tracer_provider = TracerProvider(resource=resource)
+        span_exporter = OTLPSpanExporter(endpoint=self.otlp_endpoint, insecure=True)
+        tracer_provider.add_span_processor(BatchSpanProcessor(span_exporter))
+        trace.set_tracer_provider(tracer_provider)
+        self._tracer_provider = tracer_provider
+        self._tracer = tracer_provider.get_tracer("controlplane")
+
+        try:
+            from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+            from opentelemetry.sdk.metrics import MeterProvider
+            from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
+            metric_exporter = OTLPMetricExporter(endpoint=self.otlp_endpoint, insecure=True)
+            reader = PeriodicExportingMetricReader(metric_exporter, export_interval_millis=10_000)
+            meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
+            self._meter_provider = meter_provider
+            self._meter = meter_provider.get_meter("controlplane")
+        except ImportError:
+            logger.warning("Metrics exporter not available — using no-op meter")
+            self._setup_noop_metrics()
             return
-        logger.info("Shutting down telemetry providers")
-        # Placeholder: flush and shutdown providers
-        self._initialized = False
 
-    # -- internal helpers -----------------------------------------------------
+        self._create_instruments()
 
-    def _setup_tracing(self) -> None:
-        """Configure the TracerProvider (placeholder)."""
-        logger.debug("Setting up tracing with sample_rate=%.2f", self._config.sample_rate)
-        # from opentelemetry.sdk.trace import TracerProvider
-        # from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        # from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-        #
-        # resource = Resource.create({"service.name": self._config.service_name})
-        # provider = TracerProvider(resource=resource)
-        # exporter = OTLPSpanExporter(endpoint=self._config.otlp_endpoint)
-        # provider.add_span_processor(BatchSpanProcessor(exporter))
-        # trace.set_tracer_provider(provider)
-        # self._tracer_provider = provider
+    def _setup_noop(self) -> None:
+        try:
+            from opentelemetry.sdk.resources import Resource
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.metrics import MeterProvider
 
-    def _setup_metrics(self) -> None:
-        """Configure the MeterProvider (placeholder)."""
-        logger.debug("Setting up metrics export")
-        # from opentelemetry.sdk.metrics import MeterProvider
-        # from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        # from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-        #
-        # exporter = OTLPMetricExporter(endpoint=self._config.otlp_endpoint)
-        # reader = PeriodicExportingMetricReader(exporter)
-        # provider = MeterProvider(metric_readers=[reader])
-        # metrics.set_meter_provider(provider)
-        # self._meter_provider = provider
+            resource = Resource.create({"service.name": self.service_name})
+            self._tracer_provider = TracerProvider(resource=resource)
+            self._meter_provider = MeterProvider(resource=resource)
+        except ImportError:
+            self._tracer_provider = _NoOpProvider()
+            self._meter_provider = _NoOpProvider()
 
-    def _setup_logging(self) -> None:
-        """Configure OTel log export (placeholder)."""
-        logger.debug("Setting up OTel log export")
-        # Placeholder: wire LoggerProvider with OTLPLogExporter
+        self._setup_noop_metrics()
+
+    def _setup_noop_metrics(self) -> None:
+        self.run_created_counter = _NoOpCounter()
+        self.checkpoint_duration_histogram = _NoOpHistogram()
+        self.active_runs_gauge = _NoOpGauge()
+        self.checkpoint_bytes_counter = _NoOpCounter()
+
+    def _create_instruments(self) -> None:
+        if self._meter is None:
+            self._setup_noop_metrics()
+            return
+
+        self.run_created_counter = self._meter.create_counter(
+            name="checkpoint_runtime.runs_created",
+            description="Total number of training runs created",
+            unit="1",
+        )
+        self.checkpoint_duration_histogram = self._meter.create_histogram(
+            name="checkpoint_runtime.checkpoint_duration_ms",
+            description="Time taken to complete a checkpoint",
+            unit="ms",
+        )
+        self.active_runs_gauge = self._meter.create_up_down_counter(
+            name="checkpoint_runtime.active_runs",
+            description="Number of currently active training runs",
+            unit="1",
+        )
+        self.checkpoint_bytes_counter = self._meter.create_counter(
+            name="checkpoint_runtime.checkpoint_bytes_total",
+            description="Total bytes written across all checkpoints",
+            unit="By",
+        )
 
 
-def get_tracer(name: str = "controlplane"):
-    """Return an OTel tracer for the given instrumentation scope.
+class _NoOpProvider:
+    def get_tracer(self, name: str = "") -> _NoOpTracer:
+        return _NoOpTracer()
 
-    TODO: Return a real tracer once the provider is wired.
-    """
-    logger.debug("Requested tracer: %s (returning no-op)", name)
-    return None
+    def get_meter(self, name: str = "") -> _NoOpMeter:
+        return _NoOpMeter()
+
+    def shutdown(self) -> None:
+        pass
 
 
-def get_meter(name: str = "controlplane"):
-    """Return an OTel meter for the given instrumentation scope.
+class _NoOpTracer:
+    def start_as_current_span(self, name: str, **kwargs: Any) -> Any:
+        from contextlib import nullcontext
+        return nullcontext()
 
-    TODO: Return a real meter once the provider is wired.
-    """
-    logger.debug("Requested meter: %s (returning no-op)", name)
-    return None
+
+class _NoOpMeter:
+    def create_counter(self, **kwargs: Any) -> _NoOpCounter:
+        return _NoOpCounter()
+
+    def create_histogram(self, **kwargs: Any) -> _NoOpHistogram:
+        return _NoOpHistogram()
+
+    def create_up_down_counter(self, **kwargs: Any) -> _NoOpGauge:
+        return _NoOpGauge()
+
+
+class _NoOpCounter:
+    def add(self, value: int = 1, **kwargs: Any) -> None:
+        pass
+
+
+class _NoOpHistogram:
+    def record(self, value: float, **kwargs: Any) -> None:
+        pass
+
+
+class _NoOpGauge:
+    def add(self, value: int = 1, **kwargs: Any) -> None:
+        pass
+
+
+_default_manager: TelemetryManager | None = None
+
+
+def get_telemetry_manager() -> TelemetryManager:
+    global _default_manager
+    if _default_manager is None:
+        _default_manager = TelemetryManager()
+    return _default_manager
+
+
+def setup_telemetry(
+    service_name: str | None = None,
+    otlp_endpoint: str | None = None,
+    enabled: bool | None = None,
+) -> TelemetryManager:
+    global _default_manager
+    kwargs: dict[str, Any] = {}
+    if service_name is not None:
+        kwargs["service_name"] = service_name
+    if otlp_endpoint is not None:
+        kwargs["otlp_endpoint"] = otlp_endpoint
+    if enabled is not None:
+        kwargs["enabled"] = enabled
+
+    _default_manager = TelemetryManager(**kwargs)
+    _default_manager.setup()
+    return _default_manager

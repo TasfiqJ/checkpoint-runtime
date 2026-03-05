@@ -1,17 +1,26 @@
-"""Pydantic models for the checkpoint runtime control plane."""
+"""Pydantic domain models for the checkpoint runtime control plane.
+
+These models define the canonical representations of runs, checkpoints,
+workers, and related configuration shared across the REST API, coordinator,
+and SDK.
+"""
 
 from __future__ import annotations
 
+import enum
 from datetime import datetime
-from enum import Enum
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 
-class RunState(str, Enum):
-    """All possible states in the run lifecycle."""
+# ---------------------------------------------------------------------------
+# Enumerations
+# ---------------------------------------------------------------------------
+
+
+class RunState(str, enum.Enum):
+    """Lifecycle states for a training run."""
 
     CREATED = "CREATED"
     RUNNING = "RUNNING"
@@ -23,120 +32,125 @@ class RunState(str, Enum):
     COMPLETED = "COMPLETED"
 
 
-class ShardingPolicy(str, Enum):
-    """Policy for distributing data shards across workers."""
+class ShardingPolicy(str, enum.Enum):
+    """How dataset shards are distributed across workers."""
 
-    HASH = "hash"
-    RANGE = "range"
-    ROUND_ROBIN = "round_robin"
-    CUSTOM = "custom"
+    FULL_REPLICATION = "FULL_REPLICATION"
+    RANGE_SHARDING = "RANGE_SHARDING"
+    HASH_SHARDING = "HASH_SHARDING"
+    ROUND_ROBIN = "ROUND_ROBIN"
+
+
+class HealthStatusLevel(str, enum.Enum):
+    """Service health levels."""
+
+    HEALTHY = "HEALTHY"
+    DEGRADED = "DEGRADED"
+    UNHEALTHY = "UNHEALTHY"
+
+
+# ---------------------------------------------------------------------------
+# Core domain models
+# ---------------------------------------------------------------------------
 
 
 class RunConfig(BaseModel):
-    """Configuration for creating a new run."""
+    """Configuration supplied when creating a new training run."""
 
-    dataset_id: str = Field(..., description="Identifier of the dataset to process")
-    sharding_policy: ShardingPolicy = Field(
-        default=ShardingPolicy.HASH,
-        description="How to distribute shards across workers",
-    )
-    num_workers: int = Field(default=1, ge=1, description="Number of workers to allocate")
-    checkpoint_interval_seconds: int = Field(
-        default=300, ge=0, description="Seconds between automatic checkpoints (0 = disabled)"
-    )
-    max_retries: int = Field(default=3, ge=0, description="Maximum retry attempts on failure")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Arbitrary user metadata")
-    timeout_seconds: int | None = Field(
-        default=None, ge=1, description="Overall run timeout in seconds"
-    )
+    name: str = Field(..., min_length=1, max_length=256)
+    num_workers: int = Field(..., gt=0)
+    sharding_policy: ShardingPolicy = Field(default=ShardingPolicy.RANGE_SHARDING)
+    checkpoint_interval_steps: int = Field(default=500, gt=0)
+    max_steps: int | None = Field(default=None, gt=0)
+    dataset_id: str | None = Field(default=None)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class RunStatus(BaseModel):
-    """Current status of a run."""
+    """Live status of a training run."""
 
-    run_id: UUID
+    run_id: str
+    name: str
     state: RunState
-    config: RunConfig
+    current_step: int = 0
+    num_workers: int = 0
+    active_workers: int = 0
     created_at: datetime
     updated_at: datetime
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
-    checkpoint_count: int = 0
-    current_checkpoint_id: UUID | None = None
-    assigned_workers: list[UUID] = Field(default_factory=list)
+    config: RunConfig
+    last_checkpoint_id: str | None = None
     error_message: str | None = None
-    progress_percent: float = Field(default=0.0, ge=0.0, le=100.0)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class CheckpointInfo(BaseModel):
-    """Information about a stored checkpoint."""
+    """Metadata about a single checkpoint."""
 
-    checkpoint_id: UUID
-    run_id: UUID
-    sequence_number: int = Field(ge=0, description="Monotonically increasing checkpoint index")
+    checkpoint_id: str
+    run_id: str
+    step: int
+    state: str = "PENDING"  # PENDING | IN_PROGRESS | COMMITTED | FAILED
+    num_shards: int = 0
+    total_bytes: int = 0
     created_at: datetime
-    size_bytes: int = Field(ge=0)
-    storage_path: str
-    state_digest: str = Field(
-        default="", description="SHA-256 digest of the checkpoint contents"
-    )
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    is_valid: bool = True
+    committed_at: datetime | None = None
+    shard_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class WorkerInfo(BaseModel):
-    """Information about a registered worker."""
+    """Information about a registered worker in a training run."""
 
-    worker_id: UUID
-    hostname: str
-    port: int = Field(ge=1, le=65535)
-    state: str = "idle"
-    current_run_id: UUID | None = None
+    worker_id: str
+    run_id: str
+    rank: int
+    hostname: str = ""
+    status: str = "ACTIVE"  # ACTIVE | DRAINING | DEAD
     last_heartbeat: datetime | None = None
-    capacity: int = Field(default=1, ge=1, description="Max concurrent shards this worker handles")
-    labels: dict[str, str] = Field(default_factory=dict)
+    current_step: int = 0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DatasetInfo(BaseModel):
+    """Metadata about a registered dataset."""
+
+    dataset_id: str
+    uri: str
+    total_size_bytes: int = 0
+    num_shards: int = 0
+    sharding_policy: ShardingPolicy = ShardingPolicy.RANGE_SHARDING
+    created_at: datetime | None = None
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class RunEvent(BaseModel):
     """An event emitted during a run's lifecycle."""
 
-    event_id: UUID
-    run_id: UUID
-    timestamp: datetime
     event_type: str
+    run_id: str
+    timestamp: datetime
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
-class DatasetInfo(BaseModel):
-    """Registered dataset metadata."""
-
-    dataset_id: str
-    name: str
-    shard_count: int = Field(ge=1)
-    total_size_bytes: int = Field(ge=0)
-    registered_at: datetime
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 class HealthStatus(BaseModel):
-    """Health check response."""
+    """Overall health status of the control plane."""
 
-    status: str = "ok"
-    version: str = "0.1.0"
+    status: HealthStatusLevel = HealthStatusLevel.HEALTHY
+    version: str = "0.2.0"
     uptime_seconds: float = 0.0
-    worker_count: int = 0
     active_runs: int = 0
+    etcd_connected: bool = False
+    dataplane_connected: bool = False
 
 
 class MetricsSummary(BaseModel):
-    """Aggregated metrics summary."""
+    """Aggregated metrics snapshot for the control plane."""
 
     total_runs: int = 0
     active_runs: int = 0
-    completed_runs: int = 0
-    failed_runs: int = 0
     total_checkpoints: int = 0
+    total_checkpoint_bytes: int = 0
     total_workers: int = 0
+    active_workers: int = 0
     avg_checkpoint_duration_ms: float = 0.0
-    avg_run_duration_seconds: float = 0.0
+    checkpoint_success_rate: float = 0.0

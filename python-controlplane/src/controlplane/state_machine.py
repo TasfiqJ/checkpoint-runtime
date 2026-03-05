@@ -38,6 +38,10 @@ class InvalidTransitionError(Exception):
         )
 
 
+# Backward-compatible alias
+RunStateError = InvalidTransitionError
+
+
 # Map of current state -> set of valid next states.
 VALID_TRANSITIONS: dict[RunState, set[RunState]] = {
     RunState.CREATED: {
@@ -60,10 +64,12 @@ VALID_TRANSITIONS: dict[RunState, set[RunState]] = {
     },
     RunState.FAILED: {
         RunState.RECOVERING,
+        RunState.CANCELLED,
     },
     RunState.RECOVERING: {
         RunState.RUNNING,
         RunState.FAILED,
+        RunState.CANCELLED,
     },
     RunState.CANCELLED: set(),  # terminal
     RunState.COMPLETED: set(),  # terminal

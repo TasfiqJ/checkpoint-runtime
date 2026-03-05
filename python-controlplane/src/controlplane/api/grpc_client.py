@@ -1,130 +1,218 @@
-"""gRPC client for communicating with checkpoint runtime workers.
+"""gRPC client for communicating with the Rust data plane.
 
-This is a placeholder implementation. The real client will be generated from
-the protobuf service definitions and will communicate over gRPC channels.
+Provides a typed async interface over the ``CheckpointService`` defined in
+``proto/checkpoint.proto``.  The client handles connection management,
+streaming uploads/downloads, and health checks.
+
+When the generated protobuf stubs are not available the module exposes
+a stub-free interface that raises ``NotImplementedError`` on every call,
+allowing the rest of the control plane to start without the data plane.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
-from uuid import UUID
+from typing import AsyncIterator, Sequence
+
+import grpc  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class GrpcClientConfig:
-    """Configuration for the gRPC client."""
-
-    target: str = "localhost:50051"
-    timeout_seconds: float = 30.0
-    max_retries: int = 3
-    use_tls: bool = False
-    ca_cert_path: str | None = None
-    metadata: dict[str, str] = field(default_factory=dict)
+@dataclass(frozen=True, slots=True)
+class ShardChunk:
+    shard_id: str
+    checkpoint_id: str
+    offset: int
+    data: bytes
+    is_last: bool = False
 
 
-class CheckpointGrpcClient:
-    """Client for the checkpoint runtime gRPC service.
+@dataclass(frozen=True, slots=True)
+class WriteShardResult:
+    shard_id: str
+    total_bytes: int
+    sha256_checksum: str
+    success: bool
+    error_message: str = ""
 
-    Provides methods that map to the gRPC service RPCs for worker
-    management, checkpoint operations, and health checking.
-    """
 
-    def __init__(self, config: GrpcClientConfig | None = None) -> None:
-        self._config = config or GrpcClientConfig()
-        self._channel = None  # grpc.aio.Channel placeholder
+@dataclass(frozen=True, slots=True)
+class ShardInfo:
+    shard_id: str
+    rank: int
+    size_bytes: int
+    sha256: str
+    storage_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class CommitResult:
+    success: bool
+    manifest_key: str = ""
+    error_message: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class AbortResult:
+    success: bool
+    shards_deleted: int = 0
+    error_message: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DataPlaneHealth:
+    healthy: bool
+    queue_depth: int = 0
+    memory_bytes: int = 0
+    active_uploads: int = 0
+    version: str = ""
+
+
+class DataPlaneClient:
+    """Async gRPC client to the Rust data plane CheckpointService."""
+
+    def __init__(self, address: str = "localhost:50051") -> None:
+        self._address = address
+        self._channel: grpc.aio.Channel | None = None
+        self._stub: object | None = None
         self._connected = False
-
-    # -- lifecycle ------------------------------------------------------------
 
     async def connect(self) -> None:
-        """Establish the gRPC channel.
+        try:
+            self._channel = grpc.aio.insecure_channel(self._address)
+            try:
+                from controlplane.generated import checkpoint_pb2_grpc
+                self._stub = checkpoint_pb2_grpc.CheckpointServiceStub(self._channel)
+            except ImportError:
+                logger.warning(
+                    "Generated gRPC stubs not found. Run generate_proto.py to generate them. "
+                    "The client will operate in stub-less mode."
+                )
+                self._stub = None
 
-        TODO: Create an actual ``grpc.aio.insecure_channel`` or
-        ``grpc.aio.secure_channel`` depending on config.
-        """
-        logger.info("Connecting to gRPC target %s", self._config.target)
-        # Placeholder: self._channel = grpc.aio.insecure_channel(self._config.target)
-        self._connected = True
+            self._connected = True
+            logger.info("Connected to data plane at %s", self._address)
+        except Exception as exc:
+            self._connected = False
+            logger.error("Failed to connect to data plane at %s: %s", self._address, exc)
+            raise
 
     async def close(self) -> None:
-        """Close the gRPC channel."""
         if self._channel is not None:
-            # await self._channel.close()
-            pass
-        self._connected = False
-        logger.info("gRPC channel closed")
+            await self._channel.close()
+            self._channel = None
+            self._stub = None
+            self._connected = False
 
     @property
-    def is_connected(self) -> bool:
+    def connected(self) -> bool:
         return self._connected
 
-    # -- worker RPCs ----------------------------------------------------------
+    async def write_shard(self, chunks: AsyncIterator[ShardChunk]) -> WriteShardResult:
+        self._ensure_stub()
+        from controlplane.generated import checkpoint_pb2
 
-    async def ping_worker(self, worker_id: UUID) -> bool:
-        """Send a health-check ping to a worker.
+        async def _request_iterator() -> AsyncIterator[object]:
+            async for chunk in chunks:
+                yield checkpoint_pb2.ShardChunk(
+                    shard_id=chunk.shard_id,
+                    checkpoint_id=chunk.checkpoint_id,
+                    offset=chunk.offset,
+                    data=chunk.data,
+                    is_last=chunk.is_last,
+                )
 
-        Returns True if the worker is reachable.
-        """
-        logger.debug("Pinging worker %s", worker_id)
-        # Placeholder
-        return True
-
-    async def assign_shard(
-        self,
-        worker_id: UUID,
-        run_id: UUID,
-        shard_id: int,
-    ) -> bool:
-        """Instruct a worker to begin processing a shard.
-
-        Returns True on acknowledgement.
-        """
-        logger.info(
-            "Assigning shard %d of run %s to worker %s",
-            shard_id, run_id, worker_id,
+        response = await self._stub.WriteShard(_request_iterator())
+        return WriteShardResult(
+            shard_id=response.shard_id,
+            total_bytes=response.total_bytes,
+            sha256_checksum=response.sha256_checksum,
+            success=response.success,
+            error_message=response.error_message,
         )
-        # Placeholder
-        return True
 
-    # -- checkpoint RPCs ------------------------------------------------------
+    async def read_shard(
+        self, shard_id: str, checkpoint_id: str, run_id: str,
+    ) -> AsyncIterator[ShardChunk]:
+        self._ensure_stub()
+        from controlplane.generated import checkpoint_pb2
 
-    async def trigger_checkpoint(self, worker_id: UUID, run_id: UUID) -> str:
-        """Ask a worker to begin a checkpoint.
-
-        Returns the checkpoint ID assigned by the worker.
-        """
-        logger.info(
-            "Triggering checkpoint on worker %s for run %s",
-            worker_id, run_id,
+        request = checkpoint_pb2.ReadShardRequest(
+            shard_id=shard_id, checkpoint_id=checkpoint_id, run_id=run_id,
         )
-        # Placeholder
-        return "placeholder-checkpoint-id"
 
-    async def restore_checkpoint(
-        self,
-        worker_id: UUID,
-        run_id: UUID,
-        checkpoint_id: str,
-    ) -> bool:
-        """Instruct a worker to restore from a checkpoint.
+        async for chunk in self._stub.ReadShard(request):
+            yield ShardChunk(
+                shard_id=chunk.shard_id,
+                checkpoint_id=chunk.checkpoint_id,
+                offset=chunk.offset,
+                data=chunk.data,
+                is_last=chunk.is_last,
+            )
 
-        Returns True on success.
-        """
-        logger.info(
-            "Restoring checkpoint %s on worker %s for run %s",
-            checkpoint_id, worker_id, run_id,
+    async def commit_checkpoint(
+        self, checkpoint_id: str, run_id: str, step: int,
+        shards: Sequence[ShardInfo], metadata: dict[str, str] | None = None,
+    ) -> CommitResult:
+        self._ensure_stub()
+        from controlplane.generated import checkpoint_pb2, common_pb2
+
+        proto_shards = [
+            common_pb2.ShardInfo(
+                shard_id=s.shard_id, rank=s.rank, size_bytes=s.size_bytes,
+                sha256=s.sha256, storage_key=s.storage_key,
+            )
+            for s in shards
+        ]
+
+        request = checkpoint_pb2.CommitRequest(
+            checkpoint_id=checkpoint_id, run_id=run_id,
+            step=step, shards=proto_shards, metadata=metadata or {},
         )
-        # Placeholder
-        return True
 
-    # -- context manager ------------------------------------------------------
+        response = await self._stub.CommitCheckpoint(request)
+        return CommitResult(
+            success=response.success,
+            manifest_key=response.manifest_key,
+            error_message=response.error_message,
+        )
 
-    async def __aenter__(self) -> CheckpointGrpcClient:
-        await self.connect()
-        return self
+    async def abort_checkpoint(self, checkpoint_id: str, run_id: str) -> AbortResult:
+        self._ensure_stub()
+        from controlplane.generated import checkpoint_pb2
 
-    async def __aexit__(self, *exc_info: object) -> None:
-        await self.close()
+        request = checkpoint_pb2.AbortRequest(
+            checkpoint_id=checkpoint_id, run_id=run_id,
+        )
+
+        response = await self._stub.AbortCheckpoint(request)
+        return AbortResult(
+            success=response.success,
+            shards_deleted=response.shards_deleted,
+            error_message=response.error_message,
+        )
+
+    async def health_check(self) -> DataPlaneHealth:
+        self._ensure_stub()
+        from controlplane.generated import checkpoint_pb2
+
+        request = checkpoint_pb2.HealthRequest()
+        response = await self._stub.HealthCheck(request)
+
+        healthy = response.status in (0, 1)
+        return DataPlaneHealth(
+            healthy=healthy,
+            queue_depth=response.queue_depth,
+            memory_bytes=response.memory_bytes,
+            active_uploads=response.active_uploads,
+            version=response.version,
+        )
+
+    def _ensure_stub(self) -> None:
+        if self._stub is None:
+            raise NotImplementedError(
+                "gRPC stubs are not available. Run generate_proto.py to generate them."
+            )

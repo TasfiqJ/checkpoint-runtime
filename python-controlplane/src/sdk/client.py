@@ -1,7 +1,14 @@
-"""High-level SDK client for the checkpoint runtime control plane.
+"""User-facing SDK client for the checkpoint runtime control plane.
 
-Provides a user-friendly interface for registering datasets, managing runs,
-and performing checkpoint/restore operations via the REST API.
+The ``RuntimeClient`` communicates with the control plane over its REST API.
+
+Usage::
+
+    from sdk.client import RuntimeClient
+
+    client = RuntimeClient("http://localhost:8000")
+    run = client.start_run(name="gpt-finetune", num_workers=8)
+    cp = client.checkpoint(run["run_id"], step=500)
 """
 
 from __future__ import annotations
@@ -9,143 +16,165 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sdk.types import CheckpointId, DatasetId, RunId, ShardingPolicy
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
+class SDKError(Exception):
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        self.status_code = status_code
+        super().__init__(message)
+
+
+class RunNotFoundError(SDKError):
+    pass
+
+
+class StateTransitionError(SDKError):
+    pass
+
+
 class RuntimeClient:
-    """Client for interacting with the checkpoint runtime control plane.
-
-    Usage::
-
-        async with RuntimeClient("http://localhost:8000") as client:
-            ds = await client.register_dataset("my-dataset", shard_count=8)
-            run_id = await client.start_run(ds)
-            status = await client.get_run_status(run_id)
-
-    Parameters
-    ----------
-    base_url:
-        Base URL of the control plane REST API.
-    timeout:
-        HTTP request timeout in seconds.
-    api_key:
-        Optional API key for authenticated endpoints.
-    """
+    """Synchronous SDK client for the checkpoint runtime control plane."""
 
     def __init__(
         self,
         base_url: str = "http://localhost:8000",
         timeout: float = 30.0,
-        api_key: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._timeout = timeout
-        self._api_key = api_key
-        self._http_client: Any = None  # httpx.AsyncClient placeholder
+        self._client = httpx.Client(
+            base_url=self._base_url,
+            timeout=timeout,
+            headers=headers or {},
+        )
 
-    # -- lifecycle ------------------------------------------------------------
+    def close(self) -> None:
+        self._client.close()
 
-    async def connect(self) -> None:
-        """Initialise the underlying HTTP client.
-
-        TODO: Create a real ``httpx.AsyncClient`` with auth headers.
-        """
-        logger.info("Connecting RuntimeClient to %s", self._base_url)
-        # Placeholder: self._http_client = httpx.AsyncClient(...)
-
-    async def close(self) -> None:
-        """Close the HTTP client and release resources."""
-        if self._http_client is not None:
-            # await self._http_client.aclose()
-            pass
-        logger.info("RuntimeClient closed")
-
-    async def __aenter__(self) -> RuntimeClient:
-        await self.connect()
+    def __enter__(self) -> RuntimeClient:
         return self
 
-    async def __aexit__(self, *exc_info: object) -> None:
-        await self.close()
+    def __exit__(self, *args: Any) -> None:
+        self.close()
 
-    # -- datasets -------------------------------------------------------------
+    # -- runs ---------------------------------------------------------------
 
-    async def register_dataset(
+    def start_run(
         self,
         name: str,
-        shard_count: int = 1,
-        total_size_bytes: int = 0,
-        metadata: dict[str, Any] | None = None,
-    ) -> DatasetId:
-        """Register a new dataset with the control plane.
-
-        Returns the assigned ``DatasetId``.
-        """
-        logger.info("Registering dataset %r (shards=%d)", name, shard_count)
-        # Placeholder: POST /api/datasets
-        # response = await self._http_client.post(...)
-        return DatasetId(f"ds-{name}")
-
-    # -- runs -----------------------------------------------------------------
-
-    async def start_run(
-        self,
-        dataset_id: DatasetId,
-        sharding_policy: ShardingPolicy = ShardingPolicy.HASH,
         num_workers: int = 1,
-        checkpoint_interval_seconds: int = 300,
-        max_retries: int = 3,
-        metadata: dict[str, Any] | None = None,
-    ) -> RunId:
-        """Create and start a new run.
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        config = {"name": name, "num_workers": num_workers, **kwargs}
+        resp = self._post("/api/runs", json=config)
+        run_id = resp["run_id"]
+        resp = self._post(f"/api/runs/{run_id}/start")
+        return resp
 
-        Returns the assigned ``RunId``.
-        """
-        logger.info(
-            "Starting run: dataset=%s workers=%d policy=%s",
-            dataset_id, num_workers, sharding_policy.value,
-        )
-        # Placeholder: POST /api/runs
-        return RunId("run-placeholder-id")
+    def create_run(self, config: dict[str, Any]) -> dict[str, Any]:
+        return self._post("/api/runs", json=config)
 
-    async def checkpoint(self, run_id: RunId) -> CheckpointId:
-        """Trigger an ad-hoc checkpoint for the given run.
+    def get_run_status(self, run_id: str) -> dict[str, Any]:
+        return self._get(f"/api/runs/{run_id}")
 
-        Returns the ``CheckpointId`` of the new checkpoint.
-        """
-        logger.info("Triggering checkpoint for run %s", run_id)
-        # Placeholder: POST /api/runs/{run_id}/checkpoint
-        return CheckpointId("ckpt-placeholder-id")
+    def list_runs(self) -> list[dict[str, Any]]:
+        return self._get("/api/runs")
 
-    async def resume(self, run_id: RunId) -> None:
-        """Resume a run from its most recent checkpoint."""
-        logger.info("Resuming run %s", run_id)
-        # Placeholder: POST /api/runs/{run_id}/resume
+    def cancel_run(self, run_id: str) -> dict[str, Any]:
+        return self._post(f"/api/runs/{run_id}/cancel")
 
-    async def get_run_status(self, run_id: RunId) -> dict[str, Any]:
-        """Fetch the current status of a run.
+    def complete_run(self, run_id: str) -> dict[str, Any]:
+        return self._post(f"/api/runs/{run_id}/complete")
 
-        Returns the raw status dictionary from the API.
-        """
-        logger.info("Fetching status for run %s", run_id)
-        # Placeholder: GET /api/runs/{run_id}
-        return {
-            "run_id": str(run_id),
-            "state": "CREATED",
-            "checkpoint_count": 0,
+    # -- checkpoints --------------------------------------------------------
+
+    def checkpoint(self, run_id: str, step: int | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if step is not None:
+            params["step"] = step
+        return self._post(f"/api/runs/{run_id}/checkpoint", params=params)
+
+    def commit_checkpoint(self, run_id: str) -> dict[str, Any]:
+        return self._post(f"/api/runs/{run_id}/commit")
+
+    def list_checkpoints(self, run_id: str) -> list[dict[str, Any]]:
+        return self._get(f"/api/runs/{run_id}/checkpoints")
+
+    def get_checkpoint(self, checkpoint_id: str) -> dict[str, Any]:
+        return self._get(f"/api/checkpoints/{checkpoint_id}")
+
+    # -- resume -------------------------------------------------------------
+
+    def resume(self, run_id: str) -> dict[str, Any]:
+        return self._post(f"/api/runs/{run_id}/resume")
+
+    # -- datasets -----------------------------------------------------------
+
+    def register_dataset(
+        self,
+        dataset_id: str,
+        uri: str,
+        *,
+        sharding_policy: str = "RANGE_SHARDING",
+        metadata: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        payload = {
+            "dataset_id": dataset_id,
+            "uri": uri,
+            "sharding_policy": sharding_policy,
+            "metadata": metadata or {},
         }
+        try:
+            return self._post("/api/datasets", json=payload)
+        except SDKError:
+            logger.warning("Dataset registration endpoint unavailable")
+            return payload
 
-    async def list_checkpoints(self, run_id: RunId) -> list[dict[str, Any]]:
-        """List all checkpoints for a run.
+    # -- workers ------------------------------------------------------------
 
-        Returns a list of checkpoint info dictionaries.
-        """
-        logger.info("Listing checkpoints for run %s", run_id)
-        # Placeholder: GET /api/runs/{run_id}/checkpoints
-        return []
+    def register_worker(
+        self,
+        run_id: str | None = None,
+        hostname: str = "",
+    ) -> dict[str, Any]:
+        return self._post("/api/workers/register", json={
+            "run_id": run_id,
+            "hostname": hostname,
+        })
 
-    async def cancel_run(self, run_id: RunId) -> None:
-        """Request cancellation of a running run."""
-        logger.info("Cancelling run %s", run_id)
-        # Placeholder: POST /api/runs/{run_id}/cancel
+    def heartbeat(self, worker_id: str, step: int = 0) -> dict[str, Any]:
+        return self._post(f"/api/workers/{worker_id}/heartbeat", json={"step": step})
+
+    # -- health & metrics ---------------------------------------------------
+
+    def health(self) -> dict[str, Any]:
+        return self._get("/api/health")
+
+    def metrics_summary(self) -> dict[str, Any]:
+        return self._get("/api/metrics/summary")
+
+    # -- HTTP helpers -------------------------------------------------------
+
+    def _get(self, path: str, **kwargs: Any) -> Any:
+        response = self._client.get(path, **kwargs)
+        return self._handle_response(response)
+
+    def _post(self, path: str, **kwargs: Any) -> Any:
+        response = self._client.post(path, **kwargs)
+        return self._handle_response(response)
+
+    @staticmethod
+    def _handle_response(response: httpx.Response) -> Any:
+        if response.status_code == 404:
+            detail = response.json().get("detail", "Not found")
+            raise RunNotFoundError(detail, status_code=404)
+        if response.status_code == 409:
+            detail = response.json().get("detail", "Conflict")
+            raise StateTransitionError(detail, status_code=409)
+        if response.status_code >= 400:
+            detail = response.text
+            raise SDKError(f"HTTP {response.status_code}: {detail}", status_code=response.status_code)
+        return response.json()

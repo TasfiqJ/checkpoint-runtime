@@ -1,54 +1,66 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.backends"
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "checkpoint-runtime-controlplane"
-version = "0.1.0"
-description = "Control plane for checkpoint runtime orchestration"
-readme = "README.md"
+version = "0.2.0"
+description = "Control plane for the distributed checkpoint runtime system"
 requires-python = ">=3.11"
-license = "MIT"
+license = { text = "MIT" }
 authors = [
     { name = "Checkpoint Runtime Team" },
 ]
+
 dependencies = [
-    "fastapi>=0.110",
-    "uvicorn[standard]",
-    "grpcio>=1.62",
-    "grpcio-tools>=1.62",
-    "pydantic>=2.0",
-    "opentelemetry-sdk>=1.24",
-    "opentelemetry-api>=1.24",
-    "opentelemetry-exporter-otlp>=1.24",
-    "prometheus-client",
-    "httpx",
+    "fastapi>=0.104.0,<1.0.0",
+    "uvicorn[standard]>=0.24.0,<1.0.0",
+    "pydantic>=2.5.0,<3.0.0",
+    "grpcio>=1.60.0,<2.0.0",
+    "grpcio-tools>=1.60.0,<2.0.0",
+    "boto3>=1.34.0,<2.0.0",
+    "etcd3>=0.12.0;python_version<'3.12'",
+    "prometheus-client>=0.19.0,<1.0.0",
+    "opentelemetry-sdk>=1.22.0,<2.0.0",
+    "opentelemetry-exporter-otlp>=1.22.0,<2.0.0",
+    "opentelemetry-api>=1.22.0,<2.0.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
+    "httpx>=0.25.0,<1.0.0",
+    "aiohttp>=3.9,<4.0.0",
+    "protobuf>=4.25,<6.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio",
-    "mypy",
-    "ruff",
+    "pytest>=7.4.0,<9.0.0",
+    "pytest-asyncio>=0.23.0,<1.0.0",
+    "pytest-cov>=4.1.0,<6.0.0",
+    "pytest-httpx>=0.30.0,<1.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+    "types-protobuf>=4.24.0",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/controlplane", "src/sdk"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "A", "SIM"]
+select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "A", "SIM"]
+ignore = ["ANN101", "ANN102", "ANN401"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
