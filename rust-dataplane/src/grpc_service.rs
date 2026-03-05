@@ -15,6 +15,10 @@ use crate::metrics;
 use crate::storage::checksum::StreamingChecksum;
 use crate::storage::s3::S3Client;
 
+pub mod common {
+    tonic::include_proto!("ckpt_rt.common");
+}
+
 pub mod proto {
     tonic::include_proto!("ckpt_rt.checkpoint");
 }
@@ -311,7 +315,7 @@ pub async fn build_grpc_server(
     config: Config,
 ) -> Result<
     proto::checkpoint_service_server::CheckpointServiceServer<CheckpointServiceImpl>,
-    Box<dyn std::error::Error>,
+    Box<dyn std::error::Error + Send + Sync>,
 > {
     let s3 = S3Client::new(
         &config.s3_endpoint,

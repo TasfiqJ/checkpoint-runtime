@@ -139,11 +139,9 @@ impl S3Client {
 
             let resp = req.send().await?;
 
-            if let Some(contents) = resp.contents() {
-                for obj in contents {
-                    if let Some(key) = obj.key() {
-                        keys.push(key.to_string());
-                    }
+            for obj in resp.contents() {
+                if let Some(key) = obj.key() {
+                    keys.push(key.to_string());
                 }
             }
 
