@@ -5,7 +5,7 @@ use ckpt_dataplane::grpc_service;
 use ckpt_dataplane::telemetry;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cfg = Config::from_env();
     telemetry::init_telemetry(&cfg);
 
