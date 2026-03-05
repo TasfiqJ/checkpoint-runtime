@@ -11,9 +11,9 @@ _SRC_DIR = str(Path(__file__).resolve().parent.parent / "src")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
-from controlplane.coordinator import Coordinator
-from controlplane.models import RunConfig, ShardingPolicy
-from controlplane.state_machine import RunStateMachine
+from controlplane.coordinator import Coordinator  # noqa: E402
+from controlplane.models import RunConfig, ShardingPolicy  # noqa: E402
+from controlplane.state_machine import RunStateMachine  # noqa: E402
 
 
 @pytest.fixture()

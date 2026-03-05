@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import NewType
 
 # ---------------------------------------------------------------------------
@@ -16,7 +16,7 @@ CheckpointId = NewType("CheckpointId", str)
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
-class ShardingPolicy(str, Enum):
+class ShardingPolicy(StrEnum):
     """Strategy for distributing dataset shards across workers."""
 
     HASH = "hash"

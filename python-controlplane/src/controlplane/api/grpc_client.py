@@ -7,10 +7,9 @@ streaming uploads/downloads, and health checks.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from dataclasses import dataclass, field
-from typing import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass
 
 import grpc  # type: ignore[import-untyped]
 

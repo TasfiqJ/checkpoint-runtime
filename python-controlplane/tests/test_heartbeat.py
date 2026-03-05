@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from controlplane.coordinator import Coordinator
 from controlplane.heartbeat import HeartbeatConfig, HeartbeatManager, WorkerLease
 from controlplane.models import RunConfig, RunState
@@ -236,7 +234,7 @@ class TestRecoveryManager:
         run_id = self._create_running_run(coord)
 
         hb = HeartbeatManager(config=HeartbeatConfig(dead_threshold_seconds=0.0))
-        rmgr = RecoveryManager(coordinator=coord, heartbeat_mgr=hb, auto_recover=True)
+        _rmgr = RecoveryManager(coordinator=coord, heartbeat_mgr=hb, auto_recover=True)
 
         w = coord.register_worker(run_id, rank=0)
         hb.register(w.worker_id, run_id)

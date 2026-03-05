@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
-class RunState(str, enum.Enum):
+class RunState(enum.StrEnum):
     """Lifecycle states for a training run."""
 
     CREATED = "CREATED"
@@ -32,7 +32,7 @@ class RunState(str, enum.Enum):
     COMPLETED = "COMPLETED"
 
 
-class ShardingPolicy(str, enum.Enum):
+class ShardingPolicy(enum.StrEnum):
     """How dataset shards are distributed across workers."""
 
     FULL_REPLICATION = "FULL_REPLICATION"
@@ -41,7 +41,7 @@ class ShardingPolicy(str, enum.Enum):
     ROUND_ROBIN = "ROUND_ROBIN"
 
 
-class HealthStatusLevel(str, enum.Enum):
+class HealthStatusLevel(enum.StrEnum):
     """Service health levels."""
 
     HEALTHY = "HEALTHY"

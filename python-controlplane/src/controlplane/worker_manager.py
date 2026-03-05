@@ -13,7 +13,6 @@ the Coordinator and HeartbeatManager that handles:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 
 from controlplane.coordinator import Coordinator
 from controlplane.heartbeat import HeartbeatManager

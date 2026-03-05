@@ -43,8 +43,7 @@ import os
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -67,7 +66,7 @@ from controlplane.models import (
 )
 from controlplane.recovery import RecoveryManager
 from controlplane.state_machine import InvalidTransitionError
-from controlplane.telemetry import TelemetryManager, get_telemetry_manager
+from controlplane.telemetry import get_telemetry_manager
 from controlplane.worker_manager import WorkerManager
 
 logger = logging.getLogger(__name__)
@@ -115,7 +114,10 @@ async def lifespan(app: FastAPI):
         await dp_client.connect()
         logger.info("Connected to data plane gRPC at %s", dp_address)
     except Exception:
-        logger.warning("Could not connect to data plane at %s — checkpoint operations will fail", dp_address)
+        logger.warning(
+            "Could not connect to data plane at %s — ops will fail",
+            dp_address,
+        )
 
     app.state.heartbeat_mgr = heartbeat_mgr
     app.state.worker_mgr = worker_mgr
@@ -264,7 +266,11 @@ def _register_routes(application: FastAPI) -> None:
         _publish_event(request, run_id, "run_completed", status.model_dump_json())
         return status
 
-    @application.post("/api/runs/{run_id}/checkpoint", response_model=CheckpointInfo, tags=["runs"])
+    @application.post(
+        "/api/runs/{run_id}/checkpoint",
+        response_model=CheckpointInfo,
+        tags=["runs"],
+    )
     async def trigger_checkpoint(
         run_id: str, request: Request,
         step: int | None = Query(default=None),
@@ -330,7 +336,10 @@ def _register_routes(application: FastAPI) -> None:
                 )
                 if not result.success:
                     logger.error("Data plane commit failed: %s", result.error_message)
-                    raise HTTPException(status_code=500, detail=f"Commit failed: {result.error_message}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Commit failed: {result.error_message}",
+                    )
 
                 _CHECKPOINT_DURATIONS.append(time.monotonic() - checkpoint_start)
                 logger.info("Checkpoint %s committed to data plane", active_cp.checkpoint_id)
@@ -382,7 +391,11 @@ def _register_routes(application: FastAPI) -> None:
         _publish_event(request, run_id, "run_resumed", status.model_dump_json())
         return status
 
-    @application.get("/api/runs/{run_id}/checkpoints", response_model=list[CheckpointInfo], tags=["checkpoints"])
+    @application.get(
+        "/api/runs/{run_id}/checkpoints",
+        response_model=list[CheckpointInfo],
+        tags=["checkpoints"],
+    )
     async def list_run_checkpoints(run_id: str, request: Request) -> list[CheckpointInfo]:
         coord = _get_coordinator(request)
         if coord.get_run(run_id) is None:
@@ -413,12 +426,20 @@ def _register_routes(application: FastAPI) -> None:
         return StreamingResponse(
             event_stream(),
             media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
         )
 
     # -- checkpoints --------------------------------------------------------
 
-    @application.get("/api/checkpoints/{checkpoint_id}", response_model=CheckpointInfo, tags=["checkpoints"])
+    @application.get(
+        "/api/checkpoints/{checkpoint_id}",
+        response_model=CheckpointInfo,
+        tags=["checkpoints"],
+    )
     async def get_checkpoint(checkpoint_id: str, request: Request) -> CheckpointInfo:
         coord = _get_coordinator(request)
         info = coord.get_checkpoint(checkpoint_id)
@@ -440,7 +461,12 @@ def _register_routes(application: FastAPI) -> None:
             return worker_mgr.list_all_workers()
         return _get_coordinator(request).list_workers(run_id=run_id)
 
-    @application.post("/api/workers/register", response_model=WorkerInfo, status_code=201, tags=["workers"])
+    @application.post(
+        "/api/workers/register",
+        response_model=WorkerInfo,
+        status_code=201,
+        tags=["workers"],
+    )
     async def register_worker(request: Request) -> WorkerInfo:
         body = await request.json()
         run_id = body.get("run_id")
@@ -616,10 +642,11 @@ def _register_routes(application: FastAPI) -> None:
         if hb_mgr:
             lags = hb_mgr.get_heartbeat_lags()
             if lags:
-                lines.append("# HELP controlplane_worker_heartbeat_lag_seconds Heartbeat lag per worker")
-                lines.append("# TYPE controlplane_worker_heartbeat_lag_seconds gauge")
+                metric = "controlplane_worker_heartbeat_lag_seconds"
+                lines.append(f"# HELP {metric} Heartbeat lag per worker")
+                lines.append(f"# TYPE {metric} gauge")
                 for worker_id, lag in lags.items():
-                    lines.append(f'controlplane_worker_heartbeat_lag_seconds{{worker_id="{worker_id}"}} {lag:.2f}')
+                    lines.append(f'{metric}{{worker_id="{worker_id}"}} {lag:.2f}')
                 lines.append("")
 
         # Uptime

@@ -176,5 +176,8 @@ class RuntimeClient:
             raise StateTransitionError(detail, status_code=409)
         if response.status_code >= 400:
             detail = response.text
-            raise SDKError(f"HTTP {response.status_code}: {detail}", status_code=response.status_code)
+            raise SDKError(
+                f"HTTP {response.status_code}: {detail}",
+                status_code=response.status_code,
+            )
         return response.json()

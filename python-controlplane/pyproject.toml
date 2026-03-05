@@ -60,8 +60,11 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "A", "SIM"]
-ignore = ["ANN101", "ANN102", "ANN401"]
+select = ["E", "F", "W", "UP", "SIM"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"src/controlplane/generated/*" = ["ALL"]
 
 [tool.mypy]
 python_version = "3.11"

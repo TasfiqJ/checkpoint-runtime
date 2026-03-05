@@ -11,7 +11,8 @@ mod common {
     use super::*;
 
     pub async fn create_s3_client() -> ckpt_dataplane::storage::s3::S3Client {
-        let endpoint = std::env::var("S3_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
+        let endpoint = std::env::var("S3_ENDPOINT")
+            .unwrap_or_else(|_| "http://localhost:9000".to_string());
         ckpt_dataplane::storage::s3::S3Client::new(
             &endpoint,
             "us-east-1",
@@ -87,7 +88,8 @@ async fn test_write_shard_with_checksum() {
     let bucket = "test-integration";
     s3.ensure_bucket(bucket).await.unwrap();
 
-    let writer = ckpt_dataplane::checkpoint::writer::ShardWriter::new(s3.clone(), bucket.to_string());
+    let writer =
+        ckpt_dataplane::checkpoint::writer::ShardWriter::new(s3.clone(), bucket.to_string());
 
     let data = vec![
         Bytes::from(vec![0u8; 1024]),
@@ -129,7 +131,8 @@ async fn test_manifest_write_and_read() {
     let bucket = "test-integration";
     s3.ensure_bucket(bucket).await.unwrap();
 
-    let mgr = ckpt_dataplane::checkpoint::manifest::ManifestManager::new(s3.clone(), bucket.to_string());
+    let mgr =
+        ckpt_dataplane::checkpoint::manifest::ManifestManager::new(s3.clone(), bucket.to_string());
 
     let manifest = ckpt_dataplane::checkpoint::manifest::Manifest {
         checkpoint_id: "ckpt-test-001".to_string(),
@@ -144,12 +147,14 @@ async fn test_manifest_write_and_read() {
                 rank: 0,
                 size_bytes: 2048,
                 sha256: "abc123".to_string(),
+                storage_key: "run-manifest-test/ckpt-test-001/shard-0.bin".to_string(),
             },
             ckpt_dataplane::checkpoint::manifest::ManifestShard {
                 shard_id: "shard-1".to_string(),
                 rank: 1,
                 size_bytes: 2048,
                 sha256: "def456".to_string(),
+                storage_key: "run-manifest-test/ckpt-test-001/shard-1.bin".to_string(),
             },
         ],
         metadata: std::collections::HashMap::new(),
@@ -204,13 +209,29 @@ async fn test_gc_deletes_orphaned_shards() {
     assert_eq!(deleted, 2); // orphan shard + checksum deleted
 
     // Valid checkpoint should still exist
-    assert!(s3.object_exists(bucket, &format!("{}/valid-ckpt/shard-0.bin", run_id)).await.unwrap());
-    assert!(s3.object_exists(bucket, &format!("{}/valid-ckpt/_manifest.json", run_id)).await.unwrap());
+    assert!(
+        s3.object_exists(bucket, &format!("{}/valid-ckpt/shard-0.bin", run_id))
+            .await
+            .unwrap()
+    );
+    assert!(
+        s3.object_exists(bucket, &format!("{}/valid-ckpt/_manifest.json", run_id))
+            .await
+            .unwrap()
+    );
 
     // Orphan should be gone
-    assert!(!s3.object_exists(bucket, &format!("{}/orphan-ckpt/shard-0.bin", run_id)).await.unwrap());
+    assert!(
+        !s3.object_exists(bucket, &format!("{}/orphan-ckpt/shard-0.bin", run_id))
+            .await
+            .unwrap()
+    );
 
     // Cleanup
-    s3.delete_object(bucket, &format!("{}/valid-ckpt/shard-0.bin", run_id)).await.unwrap();
-    s3.delete_object(bucket, &format!("{}/valid-ckpt/_manifest.json", run_id)).await.unwrap();
+    s3.delete_object(bucket, &format!("{}/valid-ckpt/shard-0.bin", run_id))
+        .await
+        .unwrap();
+    s3.delete_object(bucket, &format!("{}/valid-ckpt/_manifest.json", run_id))
+        .await
+        .unwrap();
 }

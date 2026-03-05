@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from controlplane.coordinator import Coordinator, InMemoryKVStore
-from controlplane.models import RunConfig, RunState, ShardingPolicy
+from controlplane.models import RunConfig, RunState
 from controlplane.state_machine import InvalidTransitionError
 
 

@@ -13,15 +13,15 @@ and integrates tightly with the Coordinator for persisting worker status.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Union
+from collections.abc import Callable
+from typing import Any
 
 from controlplane.coordinator import Coordinator
-from controlplane.models import WorkerInfo
 
 logger = logging.getLogger(__name__)
 
@@ -130,10 +130,10 @@ class WorkerLease:
 # Failure callback type
 # ---------------------------------------------------------------------------
 
-FailureCallback = Union[
-    Callable[[str, str], None],           # sync: (worker_id, run_id) -> None
-    Callable[[str, str], Any],            # async: (worker_id, run_id) -> Coroutine
-]
+FailureCallback = (
+    Callable[[str, str], None]            # sync: (worker_id, run_id) -> None
+    | Callable[[str, str], Any]           # async: (worker_id, run_id) -> Coroutine
+)
 
 
 # ---------------------------------------------------------------------------
@@ -287,10 +287,8 @@ class HeartbeatManager:
         """Cancel the background monitoring task."""
         if self._monitor_task is not None:
             self._monitor_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._monitor_task
-            except asyncio.CancelledError:
-                pass
             self._monitor_task = None
             logger.info("Heartbeat monitor stopped")
 
