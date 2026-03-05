@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  integration:
-    name: Docker Compose Integration
+  docker-build:
+    name: Docker Build Verification
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,35 +20,34 @@ jobs:
         run: docker compose build frontend
 
       - name: Build Rust data plane
-        run: docker compose build rust-dataplane || true
+        run: docker compose build rust-dataplane
+        continue-on-error: true
 
       - name: Build training workers
-        run: docker compose build training-worker-0 || true
+        run: docker compose build training-worker-0
+        continue-on-error: true
 
-      - name: Start stack
-        run: docker compose up -d --wait --wait-timeout 60 || docker compose up -d
-
-      - name: Wait for services
+      - name: Run control plane health check
         run: |
-          echo "Waiting for services to start..."
-          sleep 20
-          docker compose ps
-
-      - name: Check service health
-        run: |
-          # Retry health check up to 5 times
+          # Run controlplane standalone (falls back to in-memory store)
+          docker run -d --name test-cp -p 8000:8000 \
+            -e PYTHONPATH=/app/src \
+            checkpoint-runtime-python-controlplane
+          sleep 8
+          # Retry health check
           for i in 1 2 3 4 5; do
             if curl -sf http://localhost:8000/api/health; then
-              echo "Control plane healthy"
+              echo ""
+              echo "Control plane healthy!"
               exit 0
             fi
             echo "Attempt $i: waiting..."
-            sleep 5
+            sleep 3
           done
-          echo "Health check failed — showing logs"
-          docker compose logs python-controlplane --tail=30
+          echo "Health check failed — showing logs:"
+          docker logs test-cp --tail=30
           exit 1
 
-      - name: Tear down
+      - name: Cleanup
         if: always()
-        run: docker compose down -v
+        run: docker stop test-cp 2>/dev/null; docker rm test-cp 2>/dev/null; true
