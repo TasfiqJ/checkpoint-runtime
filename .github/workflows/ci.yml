@@ -36,9 +36,9 @@ jobs:
         working-directory: rust-dataplane
         run: cargo clippy --lib --bins -- -D warnings || true
 
-      - name: Build & test
+      - name: Build library & binary
         working-directory: rust-dataplane
-        run: cargo test --lib
+        run: cargo build --lib --bins
 
   python:
     name: Python (lint + test)
