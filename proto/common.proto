@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package ckpt_rt.common;
+
+option java_package = "com.ckptrt.common";
+
+message ShardId {
+  string value = 1;
+}
+
+message RunId {
+  string value = 1;
+}
+
+message CheckpointId {
+  string value = 1;
+}
+
+message DatasetId {
+  string value = 1;
+}
+
+message ShardInfo {
+  string shard_id = 1;
+  uint32 rank = 2;
+  uint64 size_bytes = 3;
+  string sha256 = 4;
+  string storage_key = 5;
+}
+
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+enum RunState {
+  RUN_STATE_UNSPECIFIED = 0;
+  RUN_STATE_CREATED = 1;
+  RUN_STATE_RUNNING = 2;
+  RUN_STATE_CHECKPOINTING = 3;
+  RUN_STATE_COMMITTED = 4;
+  RUN_STATE_FAILED = 5;
+  RUN_STATE_RECOVERING = 6;
+  RUN_STATE_CANCELLED = 7;
+  RUN_STATE_COMPLETED = 8;
+}

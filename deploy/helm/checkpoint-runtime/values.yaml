@@ -1,0 +1,63 @@
+global:
+  imageRegistry: ""
+  imagePullPolicy: IfNotPresent
+
+rustDataplane:
+  image:
+    repository: checkpoint-runtime/dataplane
+    tag: dev
+  replicaCount: 1
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: "1"
+    requests:
+      memory: 256Mi
+      cpu: "500m"
+  env:
+    S3_ENDPOINT: "http://minio:9000"
+    S3_BUCKET: "checkpoints"
+    S3_ACCESS_KEY: "minioadmin"
+    S3_SECRET_KEY: "minioadmin"
+
+pythonControlplane:
+  image:
+    repository: checkpoint-runtime/controlplane
+    tag: dev
+  replicaCount: 1
+  resources:
+    limits:
+      memory: 256Mi
+      cpu: "500m"
+    requests:
+      memory: 128Mi
+      cpu: "250m"
+
+frontend:
+  image:
+    repository: checkpoint-runtime/frontend
+    tag: dev
+  replicaCount: 1
+
+etcd:
+  image:
+    repository: quay.io/coreos/etcd
+    tag: v3.5.12
+  persistence:
+    size: 2Gi
+
+minio:
+  image:
+    repository: minio/minio
+    tag: latest
+  persistence:
+    size: 10Gi
+  rootUser: minioadmin
+  rootPassword: minioadmin
+
+prometheus:
+  enabled: true
+
+grafana:
+  enabled: true
+  adminPassword: admin

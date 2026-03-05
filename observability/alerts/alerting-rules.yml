@@ -1,0 +1,38 @@
+groups:
+  - name: checkpoint-runtime
+    rules:
+      - alert: HighCheckpointWriteLatency
+        expr: histogram_quantile(0.99, rate(ckpt_shard_write_duration_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Checkpoint write p99 latency exceeds 5s"
+          description: "The p99 checkpoint shard write latency is {{ $value }}s"
+
+      - alert: BackpressureQueueFull
+        expr: dataplane_backpressure_queue_depth > 28
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backpressure queue near capacity"
+          description: "Queue depth is {{ $value }}/32"
+
+      - alert: WorkerHeartbeatLag
+        expr: controlplane_worker_heartbeat_lag_seconds > 10
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker heartbeat lag exceeds 10s"
+          description: "Worker {{ $labels.worker_id }} last heartbeat was {{ $value }}s ago"
+
+      - alert: HighS3RetryRate
+        expr: rate(dataplane_s3_retry_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated S3 retry rate"
+          description: "S3 retries at {{ $value }}/sec"

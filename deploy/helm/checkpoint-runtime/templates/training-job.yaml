@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: training-job
+  labels:
+    app: training
+spec:
+  parallelism: 2
+  completions: 2
+  template:
+    metadata:
+      labels:
+        app: training
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-controlplane
+          image: busybox
+          command: ['sh', '-c', 'until wget -q -O- http://python-controlplane:8000/api/health; do echo waiting; sleep 2; done']
+      containers:
+        - name: worker
+          image: checkpoint-runtime/training:dev
+          env:
+            - name: CONTROLPLANE_URL
+              value: "http://python-controlplane:8000"
+            - name: NUM_STEPS
+              value: "100"
+            - name: CHECKPOINT_INTERVAL
+              value: "20"

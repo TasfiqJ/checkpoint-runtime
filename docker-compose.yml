@@ -1,0 +1,174 @@
+version: "3.9"
+
+services:
+  # ─── Infrastructure ─────────────────────────────────────────────
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    container_name: ckpt-etcd
+    command:
+      - etcd
+      - --name=etcd0
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: ckpt-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Data Plane ─────────────────────────────────────────────────
+  rust-dataplane:
+    build:
+      context: .
+      dockerfile: rust-dataplane/Dockerfile
+    container_name: ckpt-dataplane
+    environment:
+      GRPC_PORT: "50051"
+      METRICS_PORT: "9090"
+      S3_ENDPOINT: "http://minio:9000"
+      S3_BUCKET: "checkpoints"
+      S3_REGION: "us-east-1"
+      S3_ACCESS_KEY: "minioadmin"
+      S3_SECRET_KEY: "minioadmin"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      RUST_LOG: "info,ckpt_dataplane=debug"
+    ports:
+      - "50051:50051"
+    depends_on:
+      minio:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+
+  # ─── Control Plane ──────────────────────────────────────────────
+  python-controlplane:
+    build:
+      context: .
+      dockerfile: python-controlplane/Dockerfile
+    container_name: ckpt-controlplane
+    environment:
+      DATAPLANE_GRPC_URL: "rust-dataplane:50051"
+      ETCD_HOST: "etcd"
+      ETCD_PORT: "2379"
+      S3_ENDPOINT: "http://minio:9000"
+      S3_BUCKET: "checkpoints"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+    ports:
+      - "8000:8000"
+      - "50052:50052"
+    depends_on:
+      - rust-dataplane
+      - etcd
+      - minio
+
+  # ─── Frontend ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: ckpt-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - python-controlplane
+
+  # ─── Training Workers ──────────────────────────────────────────
+  training-worker-0:
+    build:
+      context: .
+      dockerfile: training-harness/Dockerfile
+    container_name: ckpt-worker-0
+    environment:
+      CONTROLPLANE_URL: "http://python-controlplane:8000"
+      WORKER_RANK: "0"
+      WORLD_SIZE: "2"
+      NUM_STEPS: "100"
+      CHECKPOINT_INTERVAL: "20"
+    depends_on:
+      - python-controlplane
+
+  training-worker-1:
+    build:
+      context: .
+      dockerfile: training-harness/Dockerfile
+    container_name: ckpt-worker-1
+    environment:
+      CONTROLPLANE_URL: "http://python-controlplane:8000"
+      WORKER_RANK: "1"
+      WORLD_SIZE: "2"
+      NUM_STEPS: "100"
+      CHECKPOINT_INTERVAL: "20"
+    depends_on:
+      - python-controlplane
+
+  # ─── Observability ─────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: ckpt-otel
+    command: ["--config", "/etc/otel/config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ckpt-prometheus
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ckpt-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: ckpt-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector
+    depends_on:
+      - otel-collector
+
+volumes:
+  minio-data:
+  grafana-data:

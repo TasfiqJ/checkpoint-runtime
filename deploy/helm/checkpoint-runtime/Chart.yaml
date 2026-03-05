@@ -1,0 +1,9 @@
+apiVersion: v2
+name: checkpoint-runtime
+description: Fault-tolerant, high-throughput training data & checkpoint runtime
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Tasfiq Jasimuddin
+    email: jasimuddintasfiq@gmail.com

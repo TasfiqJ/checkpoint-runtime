@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.backends"
+
+[project]
+name = "checkpoint-runtime-controlplane"
+version = "0.1.0"
+description = "Control plane for checkpoint runtime orchestration"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "Checkpoint Runtime Team" },
+]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]",
+    "grpcio>=1.62",
+    "grpcio-tools>=1.62",
+    "pydantic>=2.0",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-api>=1.24",
+    "opentelemetry-exporter-otlp>=1.24",
+    "prometheus-client",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio",
+    "mypy",
+    "ruff",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/controlplane", "src/sdk"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "A", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

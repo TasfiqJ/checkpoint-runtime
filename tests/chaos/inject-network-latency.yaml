@@ -1,0 +1,26 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: inject-latency-dataplane-minio
+  namespace: default
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: rust-dataplane
+  delay:
+    latency: "500ms"
+    jitter: "100ms"
+    correlation: "50"
+  direction: to
+  target:
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: minio
+    mode: all
+  duration: "60s"

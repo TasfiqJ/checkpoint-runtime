@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package ckpt_rt.checkpoint;
+
+import "common.proto";
+
+option java_package = "com.ckptrt.checkpoint";
+
+// The Checkpoint service handles shard writes, reads, commits, and garbage collection.
+// Only the Python control plane is a client of this service.
+service CheckpointService {
+  // Stream a shard's bytes to storage. Returns checksum + total bytes on completion.
+  rpc WriteShard(stream ShardChunk) returns (WriteShardResponse);
+
+  // Stream a shard back for checkpoint resume.
+  rpc ReadShard(ReadShardRequest) returns (stream ShardChunk);
+
+  // Write manifest after all shards confirmed. Atomic commit point.
+  rpc CommitCheckpoint(CommitRequest) returns (CommitResponse);
+
+  // Abort in-progress checkpoint, trigger shard GC.
+  rpc AbortCheckpoint(AbortRequest) returns (AbortResponse);
+
+  // Query write status of a specific shard.
+  rpc GetShardStatus(ShardStatusRequest) returns (ShardStatusResponse);
+
+  // Liveness + readiness with queue depth/memory usage.
+  rpc HealthCheck(HealthRequest) returns (HealthResponse);
+}
+
+message ShardChunk {
+  string shard_id = 1;
+  string checkpoint_id = 2;
+  uint64 offset = 3;
+  bytes data = 4;
+  bool is_last = 5;
+}
+
+message WriteShardResponse {
+  string shard_id = 1;
+  uint64 total_bytes = 2;
+  string sha256_checksum = 3;
+  bool success = 4;
+}
+
+message ReadShardRequest {
+  string shard_id = 1;
+  string checkpoint_id = 2;
+  string run_id = 3;
+}
+
+message CommitRequest {
+  string checkpoint_id = 1;
+  string run_id = 2;
+  uint64 step = 3;
+  repeated ckpt_rt.common.ShardInfo shards = 4;
+  map<string, string> metadata = 5;
+}
+
+message CommitResponse {
+  bool success = 1;
+  string manifest_key = 2;
+  string error_message = 3;
+}
+
+message AbortRequest {
+  string checkpoint_id = 1;
+  string run_id = 2;
+}
+
+message AbortResponse {
+  bool success = 1;
+  uint32 shards_deleted = 2;
+}
+
+message ShardStatusRequest {
+  string shard_id = 1;
+  string checkpoint_id = 2;
+}
+
+message ShardStatusResponse {
+  string shard_id = 1;
+  bool exists = 2;
+  uint64 size_bytes = 3;
+  string sha256_checksum = 4;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool serving = 1;
+  uint64 queue_depth = 2;
+  uint64 memory_used_bytes = 3;
+  uint64 active_uploads = 4;
+}

@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package ckpt_rt.dataset;
+
+option java_package = "com.ckptrt.dataset";
+
+// The Dataset service handles sharded data loading with backpressure.
+service DatasetService {
+  // Stream dataset shards with backpressure and flow control.
+  rpc StreamDataset(DatasetRequest) returns (stream DataChunk);
+}
+
+message DatasetRequest {
+  string dataset_id = 1;
+  uint32 shard_index = 2;
+  uint32 total_shards = 3;
+  uint64 offset = 4;
+  uint64 limit = 5;
+}
+
+message DataChunk {
+  string dataset_id = 1;
+  uint32 shard_index = 2;
+  uint64 offset = 3;
+  bytes data = 4;
+  bool is_last = 5;
+}
