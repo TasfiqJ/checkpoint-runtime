@@ -1,4 +1,4 @@
-FROM rust:1.78-bookworm AS builder
+FROM rust:1.85-bookworm AS builder
 
 # protoc is required by prost-build >= 0.13
 RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
