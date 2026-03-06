@@ -24,6 +24,9 @@ RUN echo 'server { \
         proxy_pass http://python-controlplane:8000; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
+        proxy_buffering off; \
+        proxy_read_timeout 86400s; \
+        proxy_set_header Connection ""; \
     } \
 }' > /etc/nginx/conf.d/default.conf
 

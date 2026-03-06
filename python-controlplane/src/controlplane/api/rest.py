@@ -33,6 +33,13 @@ Health & Metrics:
     GET   /api/metrics/heartbeat-lags    - Heartbeat lag for all workers
     GET   /api/metrics/prometheus        - Prometheus exposition format
     GET   /api/metrics/performance       - Performance time series for frontend
+
+Demo:
+    GET   /api/demo/containers           - Live Docker container status
+    GET   /api/demo/logs                 - SSE stream of container logs
+    GET   /api/demo/storage              - MinIO file listing
+    GET   /api/demo/storage/manifest     - Read a _manifest.json from MinIO
+    POST  /api/demo/kill-worker/{name}   - Kill a worker container
 """
 
 from __future__ import annotations
@@ -827,6 +834,241 @@ def _register_routes(application: FastAPI) -> None:
         }
 
     # -- demo control -------------------------------------------------------
+
+    @application.get("/api/demo/system", tags=["demo"])
+    async def demo_system_info() -> dict:
+        """Return host system information — proves this runs on real hardware."""
+        import subprocess, platform
+
+        def _run(cmd: list[str]) -> str:
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                return r.stdout.strip()
+            except Exception:
+                return "N/A"
+
+        # CPU info
+        cpu_info = "N/A"
+        try:
+            with open("/proc/cpuinfo") as f:
+                for line in f:
+                    if line.startswith("model name"):
+                        cpu_info = line.split(":", 1)[1].strip()
+                        break
+        except FileNotFoundError:
+            cpu_info = platform.processor() or "N/A"
+
+        # CPU count
+        cpu_count = os.cpu_count() or 0
+
+        # Memory info
+        mem_total = mem_available = "N/A"
+        try:
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemTotal"):
+                        kb = int(line.split()[1])
+                        mem_total = f"{kb / 1024 / 1024:.1f} GB"
+                    elif line.startswith("MemAvailable"):
+                        kb = int(line.split()[1])
+                        mem_available = f"{kb / 1024:.0f} MB"
+        except FileNotFoundError:
+            pass
+
+        # Disk usage
+        disk_info = "N/A"
+        try:
+            import shutil
+            usage = shutil.disk_usage("/")
+            disk_info = f"{usage.used / 1024**3:.1f} GB / {usage.total / 1024**3:.1f} GB"
+        except Exception:
+            pass
+
+        # Docker version
+        docker_version = _run(["docker", "--version"])
+
+        # Container count
+        container_count = _run(["docker", "ps", "-q"]).count("\n") + 1 if _run(["docker", "ps", "-q"]) else 0
+
+        return {
+            "hostname": platform.node(),
+            "os": _run(["uname", "-sr"]) or f"{platform.system()} {platform.release()}",
+            "arch": platform.machine(),
+            "cpu": cpu_info,
+            "cpu_count": cpu_count,
+            "memory_total": mem_total,
+            "memory_available": mem_available,
+            "disk": disk_info,
+            "uptime": _run(["uptime", "-p"]),
+            "docker_version": docker_version,
+            "container_count": container_count,
+            "python_version": platform.python_version(),
+        }
+
+    @application.get("/api/demo/containers", tags=["demo"])
+    async def demo_containers() -> list[dict]:
+        """Return live Docker container status for the compose stack."""
+        import subprocess, json as _json
+
+        try:
+            result = subprocess.run(
+                ["docker", "ps", "-a", "--format", "{{json .}}",
+                 "--filter", "label=com.docker.compose.project"],
+                capture_output=True, text=True, timeout=5,
+            )
+            containers = []
+            for line in result.stdout.strip().splitlines():
+                if not line:
+                    continue
+                c = _json.loads(line)
+                containers.append({
+                    "name": c.get("Names", ""),
+                    "image": c.get("Image", ""),
+                    "status": c.get("Status", ""),
+                    "state": c.get("State", ""),
+                    "ports": c.get("Ports", ""),
+                })
+            return containers
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return []
+
+    @application.get("/api/demo/logs", tags=["demo"])
+    async def demo_logs(
+        containers: str = "ckpt-worker-0,ckpt-controlplane,ckpt-dataplane",
+        tail: int = 30,
+    ):
+        """Stream live Docker container logs as Server-Sent Events."""
+
+        container_list = [
+            c.strip() for c in containers.split(",")
+            if c.strip() in {
+                "ckpt-worker-0", "ckpt-worker-1", "ckpt-controlplane",
+                "ckpt-dataplane", "ckpt-etcd", "ckpt-minio",
+            }
+        ]
+        if not container_list:
+            raise HTTPException(status_code=400, detail="No valid containers specified")
+
+        import json as _json
+
+        async def stream():
+            processes: list[tuple[str, asyncio.subprocess.Process]] = []
+
+            try:
+                for cname in container_list:
+                    proc = await asyncio.create_subprocess_exec(
+                        "docker", "logs", "--tail", str(tail), "--follow",
+                        "--timestamps", cname,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.STDOUT,
+                    )
+                    processes.append((cname, proc))
+
+                async def read_lines(name: str, proc: asyncio.subprocess.Process):
+                    assert proc.stdout is not None
+                    async for raw_line in proc.stdout:
+                        line = raw_line.decode("utf-8", errors="replace").rstrip()
+                        if line:
+                            yield name, line
+
+                # Merge all container streams via asyncio
+                import asyncio as _aio
+
+                queues: asyncio.Queue[tuple[str, str] | None] = asyncio.Queue()
+
+                async def reader(name: str, proc: asyncio.subprocess.Process):
+                    async for n, l in read_lines(name, proc):
+                        await queues.put((n, l))
+                    await queues.put(None)
+
+                tasks = [_aio.create_task(reader(n, p)) for n, p in processes]
+                done_count = 0
+
+                while done_count < len(tasks):
+                    item = await queues.get()
+                    if item is None:
+                        done_count += 1
+                        continue
+                    name, line = item
+                    payload = _json.dumps({"container": name, "line": line})
+                    yield f"data: {payload}\n\n"
+
+            finally:
+                for _, proc in processes:
+                    try:
+                        proc.kill()
+                    except ProcessLookupError:
+                        pass
+
+        return StreamingResponse(stream(), media_type="text/event-stream", headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        })
+
+    @application.get("/api/demo/storage", tags=["demo"])
+    async def demo_storage() -> dict:
+        """List files in the MinIO checkpoints bucket."""
+        import boto3
+        from botocore.config import Config as BotoConfig
+
+        s3_endpoint = os.environ.get("S3_ENDPOINT", "http://minio:9000")
+        s3_bucket = os.environ.get("S3_BUCKET", "checkpoints")
+        s3_access = os.environ.get("S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"))
+        s3_secret = os.environ.get("S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"))
+
+        try:
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=s3_endpoint,
+                aws_access_key_id=s3_access,
+                aws_secret_access_key=s3_secret,
+                config=BotoConfig(signature_version="s3v4"),
+                region_name="us-east-1",
+            )
+            resp = s3.list_objects_v2(Bucket=s3_bucket, MaxKeys=500)
+            files = []
+            total_bytes = 0
+            for obj in resp.get("Contents", []):
+                files.append({
+                    "key": obj["Key"],
+                    "size": obj["Size"],
+                    "modified": obj["LastModified"].isoformat(),
+                })
+                total_bytes += obj["Size"]
+            return {"files": files, "total_bytes": total_bytes}
+        except Exception as exc:
+            logger.warning("Failed to list MinIO storage: %s", exc)
+            return {"files": [], "total_bytes": 0, "error": str(exc)}
+
+    @application.get("/api/demo/storage/manifest", tags=["demo"])
+    async def demo_storage_manifest(key: str = Query(...)) -> dict:
+        """Read a _manifest.json file from MinIO and return its content."""
+        import boto3, json as _json
+        from botocore.config import Config as BotoConfig
+
+        if not key.endswith("_manifest.json"):
+            raise HTTPException(status_code=400, detail="Only _manifest.json files can be read")
+
+        s3_endpoint = os.environ.get("S3_ENDPOINT", "http://minio:9000")
+        s3_bucket = os.environ.get("S3_BUCKET", "checkpoints")
+        s3_access = os.environ.get("S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"))
+        s3_secret = os.environ.get("S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"))
+
+        try:
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=s3_endpoint,
+                aws_access_key_id=s3_access,
+                aws_secret_access_key=s3_secret,
+                config=BotoConfig(signature_version="s3v4"),
+                region_name="us-east-1",
+            )
+            obj = s3.get_object(Bucket=s3_bucket, Key=key)
+            content = obj["Body"].read().decode("utf-8")
+            return _json.loads(content)
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail=f"Manifest not found: {exc}")
 
     @application.post("/api/demo/kill-worker/{container_name}", tags=["demo"])
     async def demo_kill_worker(container_name: str) -> dict:

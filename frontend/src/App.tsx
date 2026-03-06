@@ -1,14 +1,18 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
 import RunsPage from './pages/RunsPage';
 import RunDetailPage from './pages/RunDetailPage';
 import CheckpointBrowser from './pages/CheckpointBrowser';
 import HealthPage from './pages/HealthPage';
 import PerformancePage from './pages/PerformancePage';
 import DemoPage from './pages/DemoPage';
+import HowItWorksPage from './pages/HowItWorksPage';
 
 const navItems = [
+  { to: '/', label: 'Home' },
+  { to: '/how-it-works', label: 'How It Works' },
   { to: '/demo', label: 'Live Demo' },
-  { to: '/', label: 'Runs' },
+  { to: '/runs', label: 'Runs' },
   { to: '/checkpoints', label: 'Checkpoints' },
   { to: '/health', label: 'Health' },
   { to: '/performance', label: 'Performance' },
@@ -18,7 +22,8 @@ function App() {
   const location = useLocation();
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/' || (location.pathname.startsWith('/runs') && !location.pathname.startsWith('/demo'));
+    if (path === '/') return location.pathname === '/';
+    if (path === '/runs') return location.pathname === '/runs' || (location.pathname.startsWith('/runs/'));
     return location.pathname.startsWith(path);
   };
 
@@ -33,12 +38,12 @@ function App() {
               Checkpoint Runtime
             </h1>
           </Link>
-          <div className="flex gap-1 text-sm font-medium">
+          <div className="flex gap-1 text-xs md:text-sm font-medium overflow-x-auto">
             {navItems.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
+                className={`px-2 md:px-3 py-1.5 rounded-md transition-colors whitespace-nowrap ${
                   isActive(item.to)
                     ? 'bg-gray-800 text-indigo-400'
                     : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
@@ -54,8 +59,10 @@ function App() {
       {/* Main Content */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
         <Routes>
-          <Route path="/" element={<RunsPage />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/demo" element={<DemoPage />} />
+          <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
           <Route path="/checkpoints" element={<CheckpointBrowser />} />
           <Route path="/health" element={<HealthPage />} />
