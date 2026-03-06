@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { RunEvent } from '../types';
+import { API_BASE } from '../config/api';
 
 const MAX_EVENTS = 200;
 
@@ -14,7 +15,7 @@ export function useEventStream(runId: string | undefined): RunEvent[] {
   useEffect(() => {
     if (!runId) return;
 
-    const es = new EventSource(`/api/runs/${runId}/events`);
+    const es = new EventSource(`${API_BASE}/api/runs/${runId}/events`);
 
     const pushEvent = (type: string, data: string) => {
       const event: RunEvent = {

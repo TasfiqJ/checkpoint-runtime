@@ -1,4 +1,5 @@
 import { usePolling } from '../hooks/usePolling';
+import { API_BASE } from '../config/api';
 
 interface ContainerInfo {
   name: string;
@@ -10,7 +11,7 @@ interface ContainerInfo {
 
 export default function ContainerStatus() {
   const { data: containers } = usePolling<ContainerInfo[]>(
-    '/api/demo/containers',
+    `${API_BASE}/api/demo/containers`,
     3000,
   );
 

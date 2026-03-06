@@ -4,6 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import type { MetricsSummary } from '../types';
+import { API_BASE } from '../config/api';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,8 +79,8 @@ function PerformancePage() {
   const fetchData = useCallback(async () => {
     try {
       const [metricsRes, perfRes] = await Promise.all([
-        fetch('/api/metrics/summary'),
-        fetch('/api/metrics/performance'),
+        fetch(`${API_BASE}/api/metrics/summary`),
+        fetch(`${API_BASE}/api/metrics/performance`),
       ]);
       if (!metricsRes.ok) throw new Error(`Metrics: ${metricsRes.status} ${metricsRes.statusText}`);
       setMetrics(await metricsRes.json());

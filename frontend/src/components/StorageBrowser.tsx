@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { usePolling } from '../hooks/usePolling';
+import { API_BASE } from '../config/api';
 
 interface StorageFile {
   key: string;
@@ -37,7 +38,7 @@ function buildTree(files: StorageFile[]): Map<string, Map<string, StorageFile[]>
 
 export default function StorageBrowser({ active }: { active: boolean }) {
   const { data } = usePolling<StorageData>(
-    '/api/demo/storage',
+    `${API_BASE}/api/demo/storage`,
     active ? 5000 : 60000,
   );
   const [expandedManifest, setExpandedManifest] = useState<string | null>(null);
@@ -53,7 +54,7 @@ export default function StorageBrowser({ active }: { active: boolean }) {
     }
     setExpandedManifest(key);
     try {
-      const res = await fetch(`/api/demo/storage/manifest?key=${encodeURIComponent(key)}`);
+      const res = await fetch(`${API_BASE}/api/demo/storage/manifest?key=${encodeURIComponent(key)}`);
       if (res.ok) setManifestContent(await res.json());
     } catch {
       setManifestContent({ error: 'Failed to load manifest' });

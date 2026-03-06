@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { API_BASE } from '../config/api';
 
 interface LogLine {
   container: string;
@@ -38,7 +39,7 @@ export default function LogStream({ active }: { active: boolean }) {
     if (!active) return;
 
     const containers = 'ckpt-worker-0,ckpt-worker-1,ckpt-controlplane,ckpt-dataplane';
-    const es = new EventSource(`/api/demo/logs?containers=${containers}&tail=20`);
+    const es = new EventSource(`${API_BASE}/api/demo/logs?containers=${containers}&tail=20`);
 
     es.onmessage = (evt) => {
       try {

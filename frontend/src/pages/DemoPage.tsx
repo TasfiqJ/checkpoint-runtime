@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { RunStatus, RunState, WorkerInfo, CheckpointInfo } from '../types';
+import { API_BASE } from '../config/api';
 import ContainerStatus from '../components/ContainerStatus';
 import LogStream from '../components/LogStream';
 import StorageBrowser from '../components/StorageBrowser';
@@ -87,9 +88,9 @@ export default function DemoPage() {
     const poll = async () => {
       try {
         const [runRes, workersRes, cpRes] = await Promise.all([
-          fetch(`/api/runs/${runId}`),
-          fetch(`/api/workers?run_id=${runId}`),
-          fetch(`/api/runs/${runId}/checkpoints`),
+          fetch(`${API_BASE}/api/runs/${runId}`),
+          fetch(`${API_BASE}/api/workers?run_id=${runId}`),
+          fetch(`${API_BASE}/api/runs/${runId}/checkpoints`),
         ]);
         if (runRes.ok) {
           const data: RunStatus = await runRes.json();
@@ -164,7 +165,7 @@ export default function DemoPage() {
 
       let foundRunId: string | null = null;
       for (let i = 0; i < 30; i++) {
-        const res = await fetch('/api/runs');
+        const res = await fetch(`${API_BASE}/api/runs`);
         if (res.ok) {
           const runs: RunStatus[] = await res.json();
           const active = runs.find(r => r.state === 'RUNNING' || r.state === 'CHECKPOINTING' || r.state === 'COMMITTED');
@@ -196,7 +197,7 @@ export default function DemoPage() {
     addEvent(`Killing container: ${containerName}`, 'error');
 
     try {
-      const res = await fetch(`/api/demo/kill-worker/${containerName}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/demo/kill-worker/${containerName}`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         addEvent(`Container ${containerName} killed. Waiting for failure detection...`, 'warning');

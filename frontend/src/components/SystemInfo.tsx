@@ -1,4 +1,5 @@
 import { usePolling } from '../hooks/usePolling';
+import { API_BASE } from '../config/api';
 
 interface SystemData {
   hostname: string;
@@ -16,7 +17,7 @@ interface SystemData {
 }
 
 export default function SystemInfo() {
-  const { data } = usePolling<SystemData>('/api/demo/system', 30000);
+  const { data } = usePolling<SystemData>(`${API_BASE}/api/demo/system`, 30000);
 
   if (!data) {
     return (

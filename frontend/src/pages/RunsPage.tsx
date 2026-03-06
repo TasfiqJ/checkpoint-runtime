@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import type { RunStatus, RunState, RunConfig } from '../types';
+import { API_BASE } from '../config/api';
 
 // ── State badge colour map ───────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ function NewRunModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/runs', {
+      const res = await fetch(`${API_BASE}/api/runs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -131,7 +132,7 @@ function RunsPage() {
 
   const fetchRuns = useCallback(async () => {
     try {
-      const res = await fetch('/api/runs');
+      const res = await fetch(`${API_BASE}/api/runs`);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const data: RunStatus[] = await res.json();
       setRuns(data);
@@ -153,7 +154,7 @@ function RunsPage() {
   // Action helpers
   const postAction = async (runId: string, action: 'start' | 'cancel') => {
     try {
-      const res = await fetch(`/api/runs/${runId}/${action}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/runs/${runId}/${action}`, { method: 'POST' });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       fetchRuns();
     } catch (e: unknown) {

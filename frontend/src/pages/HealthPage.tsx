@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { HealthStatus, HealthLevel, WorkerInfo } from '../types';
+import { API_BASE } from '../config/api';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,9 +63,9 @@ function HealthPage() {
   const fetchAll = useCallback(async () => {
     try {
       const [healthRes, workersRes, lagsRes] = await Promise.all([
-        fetch('/api/health'),
-        fetch('/api/workers'),
-        fetch('/api/metrics/heartbeat-lags'),
+        fetch(`${API_BASE}/api/health`),
+        fetch(`${API_BASE}/api/workers`),
+        fetch(`${API_BASE}/api/metrics/heartbeat-lags`),
       ]);
 
       if (!healthRes.ok) throw new Error(`Health: ${healthRes.status}`);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { RunStatus, CheckpointInfo, CheckpointState } from '../types';
+import { API_BASE } from '../config/api';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -102,13 +103,13 @@ function CheckpointBrowser() {
   const fetchAll = useCallback(async () => {
     try {
       // First get all runs, then fetch checkpoints for each
-      const runsRes = await fetch('/api/runs');
+      const runsRes = await fetch(`${API_BASE}/api/runs`);
       if (!runsRes.ok) throw new Error(`Runs: ${runsRes.status}`);
       const runs: RunStatus[] = await runsRes.json();
 
       const ckptPromises = runs.map(async (r) => {
         try {
-          const res = await fetch(`/api/runs/${r.run_id}/checkpoints`);
+          const res = await fetch(`${API_BASE}/api/runs/${r.run_id}/checkpoints`);
           if (!res.ok) return [];
           return (await res.json()) as CheckpointInfo[];
         } catch {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { RunStatus, RunState, CheckpointInfo, CheckpointState, RunEvent } from '../types';
+import { API_BASE } from '../config/api';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,8 +74,8 @@ function RunDetailPage() {
     if (!id) return;
     try {
       const [runRes, ckptRes] = await Promise.all([
-        fetch(`/api/runs/${id}`),
-        fetch(`/api/runs/${id}/checkpoints`),
+        fetch(`${API_BASE}/api/runs/${id}`),
+        fetch(`${API_BASE}/api/runs/${id}/checkpoints`),
       ]);
       if (!runRes.ok) throw new Error(`Run: ${runRes.status}`);
       if (!ckptRes.ok) throw new Error(`Checkpoints: ${ckptRes.status}`);
@@ -98,7 +99,7 @@ function RunDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    const es = new EventSource(`/api/runs/${id}/events`);
+    const es = new EventSource(`${API_BASE}/api/runs/${id}/events`);
 
     es.onmessage = (evt) => {
       const event: RunEvent = {
@@ -155,7 +156,7 @@ function RunDetailPage() {
   const postAction = async (action: string) => {
     if (!id) return;
     try {
-      const res = await fetch(`/api/runs/${id}/${action}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/runs/${id}/${action}`, { method: 'POST' });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       fetchData();
     } catch (e: unknown) {
