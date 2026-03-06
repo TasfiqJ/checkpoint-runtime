@@ -22,6 +22,12 @@ RUN cargo build --release 2>/dev/null || true
 COPY rust-dataplane/src/ ./src/
 COPY rust-dataplane/benches/ ./benches/
 
+# Remove cached ckpt-dataplane artifacts so cargo rebuilds with real source
+RUN rm -rf target/release/.fingerprint/ckpt-dataplane-* \
+           target/release/deps/ckpt_dataplane-* \
+           target/release/deps/libckpt_dataplane-* \
+           target/release/ckpt-dataplane
+
 # Build the real binary
 RUN cargo build --release
 

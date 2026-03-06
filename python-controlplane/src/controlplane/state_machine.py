@@ -57,10 +57,12 @@ VALID_TRANSITIONS: dict[RunState, set[RunState]] = {
     RunState.CHECKPOINTING: {
         RunState.COMMITTED,
         RunState.FAILED,
+        RunState.RUNNING,  # recovery: abort failed checkpoint, resume training
     },
     RunState.COMMITTED: {
         RunState.RUNNING,
         RunState.COMPLETED,
+        RunState.FAILED,
     },
     RunState.FAILED: {
         RunState.RECOVERING,

@@ -12,6 +12,7 @@ services:
     ports:
       - "2379:2379"
       - "2380:2380"
+    restart: always
     healthcheck:
       test: ["CMD", "etcdctl", "endpoint", "health"]
       interval: 10s
@@ -23,15 +24,16 @@ services:
     container_name: ckpt-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio-data:/data
+    restart: always
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -48,13 +50,14 @@ services:
       S3_ENDPOINT: "http://minio:9000"
       S3_BUCKET: "checkpoints"
       S3_REGION: "us-east-1"
-      S3_ACCESS_KEY: "minioadmin"
-      S3_SECRET_KEY: "minioadmin"
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
       RUST_LOG: "info,ckpt_dataplane=debug"
     ports:
       - "50051:50051"
-      - "9090:9090"    # Prometheus metrics
+      - "9090:9090"
+    restart: always
     depends_on:
       minio:
         condition: service_healthy
@@ -77,10 +80,16 @@ services:
     ports:
       - "8000:8000"
       - "50052:50052"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # for demo kill-worker endpoint
+    restart: always
     depends_on:
-      - rust-dataplane
-      - etcd
-      - minio
+      rust-dataplane:
+        condition: service_started
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   # ─── Frontend ───────────────────────────────────────────────────
   frontend:
@@ -90,6 +99,7 @@ services:
     container_name: ckpt-frontend
     ports:
       - "3000:80"
+    restart: always
     depends_on:
       - python-controlplane
 
@@ -100,15 +110,21 @@ services:
       dockerfile: training-harness/Dockerfile
     container_name: ckpt-worker-0
     environment:
-      CONTROLPLANE_URL: "http://python-controlplane:8000"
+      CONTROL_PLANE_URL: "http://python-controlplane:8000"
+      RANK: "0"
       WORKER_RANK: "0"
+      LOCAL_RANK: "0"
       WORLD_SIZE: "2"
-      NUM_STEPS: "100"
-      CHECKPOINT_INTERVAL: "20"
+      NUM_STEPS: "10000"
+      CHECKPOINT_INTERVAL: "50"
       MASTER_ADDR: "training-worker-0"
       MASTER_PORT: "29500"
+    volumes:
+      - run-shared:/shared
+    restart: always
     depends_on:
       - python-controlplane
+      - rust-dataplane
 
   training-worker-1:
     build:
@@ -116,15 +132,21 @@ services:
       dockerfile: training-harness/Dockerfile
     container_name: ckpt-worker-1
     environment:
-      CONTROLPLANE_URL: "http://python-controlplane:8000"
+      CONTROL_PLANE_URL: "http://python-controlplane:8000"
+      RANK: "1"
       WORKER_RANK: "1"
+      LOCAL_RANK: "0"
       WORLD_SIZE: "2"
-      NUM_STEPS: "100"
-      CHECKPOINT_INTERVAL: "20"
+      NUM_STEPS: "10000"
+      CHECKPOINT_INTERVAL: "50"
       MASTER_ADDR: "training-worker-0"
       MASTER_PORT: "29500"
+    volumes:
+      - run-shared:/shared
+    restart: always
     depends_on:
       - python-controlplane
+      - rust-dataplane
 
   # ─── Observability ─────────────────────────────────────────────
   otel-collector:
@@ -134,9 +156,10 @@ services:
     volumes:
       - ./observability/otel-collector-config.yaml:/etc/otel/config.yaml:ro
     ports:
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
-      - "8889:8889"   # Prometheus metrics
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"
+    restart: always
 
   prometheus:
     image: prom/prometheus:latest
@@ -146,6 +169,7 @@ services:
       - ./observability/alerts:/etc/prometheus/alerts:ro
     ports:
       - "9091:9090"
+    restart: always
     depends_on:
       - otel-collector
 
@@ -162,6 +186,7 @@ services:
       - grafana-data:/var/lib/grafana
     ports:
       - "3001:3000"
+    restart: always
     depends_on:
       - prometheus
 
@@ -171,11 +196,13 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
-      - "16686:16686"  # Jaeger UI
-      - "14268:14268"  # Jaeger collector
+      - "16686:16686"
+      - "14268:14268"
+    restart: always
     depends_on:
       - otel-collector
 
 volumes:
   minio-data:
   grafana-data:
+  run-shared:

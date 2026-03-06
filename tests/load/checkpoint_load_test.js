@@ -79,22 +79,34 @@ export function apiStress() {
   sleep(0.5);
 }
 
-// Scenario 2: Checkpoint throughput — create run, checkpoint cycle
+// Generate 1MB of random data for shard upload
+const SHARD_SIZE = 1024 * 1024; // 1MB
+function generateShardData() {
+  // k6 doesn't have crypto.randomBytes, so we use a pre-built binary payload
+  const bytes = new Uint8Array(SHARD_SIZE);
+  for (let i = 0; i < SHARD_SIZE; i++) {
+    bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return bytes.buffer;
+}
+
+const shardPayload = generateShardData();
+
+// Scenario 2: Checkpoint throughput — full data flow with shard upload
 export function checkpointThroughput() {
-  group("Checkpoint Throughput", () => {
+  group("Checkpoint Throughput (with data)", () => {
     // Create a run
     const createRes = http.post(
       `${BASE_URL}/api/runs`,
       JSON.stringify({
-        dataset_id: `load-test-dataset-${__VU}`,
-        sharding_policy: "hash",
+        name: `load-test-${__VU}-${Date.now()}`,
         num_workers: 1,
-        checkpoint_interval_seconds: 5,
+        checkpoint_interval_steps: 100,
       }),
       { headers: { "Content-Type": "application/json" } }
     );
 
-    if (check(createRes, { "create run 200": (r) => r.status === 200 })) {
+    if (check(createRes, { "create run 201": (r) => r.status === 201 })) {
       const runId = createRes.json("run_id");
       if (!runId) return;
 
@@ -102,20 +114,43 @@ export function checkpointThroughput() {
       const startRes = http.post(`${BASE_URL}/api/runs/${runId}/start`);
       check(startRes, { "start run 200": (r) => r.status === 200 });
 
-      // Checkpoint cycle
+      // Checkpoint cycle with actual shard data
       for (let i = 0; i < 3; i++) {
-        const ckptRes = http.post(`${BASE_URL}/api/runs/${runId}/checkpoint`);
-        if (check(ckptRes, { "checkpoint 200": (r) => r.status === 200 })) {
-          checkpointLatency.add(ckptRes.timings.duration);
+        const ckptStart = Date.now();
 
-          const commitRes = http.post(`${BASE_URL}/api/runs/${runId}/commit`);
-          check(commitRes, { "commit 200": (r) => r.status === 200 });
+        // 1. Trigger checkpoint
+        const ckptRes = http.post(`${BASE_URL}/api/runs/${runId}/checkpoint?step=${(i + 1) * 100}`);
+        if (!check(ckptRes, { "checkpoint triggered": (r) => r.status === 200 })) {
+          errorRate.add(1);
+          break;
         }
-        sleep(1);
+        const checkpointId = ckptRes.json("checkpoint_id");
+
+        // 2. Upload 1MB shard data
+        const uploadRes = http.post(
+          `${BASE_URL}/api/runs/${runId}/checkpoints/${checkpointId}/shards/rank-0`,
+          shardPayload,
+          {
+            headers: {
+              "Content-Type": "application/octet-stream",
+              "X-Shard-Rank": "0",
+            },
+            timeout: "60s",
+          }
+        );
+        check(uploadRes, { "shard uploaded": (r) => r.status === 200 });
+
+        // 3. Commit checkpoint
+        const commitRes = http.post(`${BASE_URL}/api/runs/${runId}/commit`);
+        check(commitRes, { "commit 200": (r) => r.status === 200 });
+
+        const ckptDuration = Date.now() - ckptStart;
+        checkpointLatency.add(ckptDuration);
+        sleep(0.5);
       }
 
-      // Cancel run
-      http.post(`${BASE_URL}/api/runs/${runId}/cancel`);
+      // Complete run
+      http.post(`${BASE_URL}/api/runs/${runId}/complete`);
     } else {
       errorRate.add(1);
     }

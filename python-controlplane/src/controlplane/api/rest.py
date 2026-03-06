@@ -47,9 +47,9 @@ from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 
-from controlplane.api.grpc_client import DataPlaneClient, ShardInfo as GrpcShardInfo
+from controlplane.api.grpc_client import DataPlaneClient, ShardChunk, ShardInfo as GrpcShardInfo
 from controlplane.coordinator import Coordinator
 from controlplane.heartbeat import HeartbeatConfig, HeartbeatManager
 from controlplane.models import (
@@ -84,8 +84,10 @@ _METRICS: dict[str, float] = {
     "controlplane_active_workers": 0,
 }
 _CHECKPOINT_DURATIONS: list[float] = []
+_RESTORE_DURATIONS: list[float] = []
 _HEARTBEAT_LAGS: dict[str, float] = {}
 _APP_START_TIME: float = time.monotonic()
+_CHECKPOINT_SHARDS: dict[str, list[GrpcShardInfo]] = {}  # checkpoint_id -> shard infos
 
 
 # ---------------------------------------------------------------------------
@@ -101,14 +103,23 @@ async def lifespan(app: FastAPI):
 
     coord: Coordinator = app.state.coordinator
 
-    heartbeat_mgr = HeartbeatManager(config=HeartbeatConfig(), coordinator=coord)
+    heartbeat_mgr = HeartbeatManager(
+        config=HeartbeatConfig(
+            interval_seconds=5.0,
+            timeout_seconds=10.0,
+            dead_threshold_seconds=15.0,
+            monitor_poll_seconds=3.0,
+        ),
+        coordinator=coord,
+    )
     worker_mgr = WorkerManager(coordinator=coord, heartbeat_mgr=heartbeat_mgr)
     recovery_mgr = RecoveryManager(coordinator=coord, heartbeat_mgr=heartbeat_mgr)
     telemetry_mgr = get_telemetry_manager()
     telemetry_mgr.setup()
 
     # Connect to data plane gRPC
-    dp_address = os.environ.get("DATAPLANE_GRPC_ADDRESS", "rust-dataplane:50051")
+    dp_address = os.environ.get("DATAPLANE_GRPC_URL",
+                                   os.environ.get("DATAPLANE_GRPC_ADDRESS", "rust-dataplane:50051"))
     dp_client = DataPlaneClient(address=dp_address)
     try:
         await dp_client.connect()
@@ -316,17 +327,8 @@ def _register_routes(application: FastAPI) -> None:
         if dp and dp.connected and active_cp:
             checkpoint_start = time.monotonic()
             try:
-                # Collect shard info from the checkpoint metadata
-                shard_infos = [
-                    GrpcShardInfo(
-                        shard_id=s.get("shard_id", f"shard-{i}"),
-                        rank=s.get("rank", i),
-                        size_bytes=s.get("size_bytes", 0),
-                        sha256=s.get("sha256", ""),
-                        storage_key=s.get("storage_key", ""),
-                    )
-                    for i, s in enumerate(getattr(active_cp, "shards", []) or [])
-                ]
+                # Use shard infos tracked during upload
+                shard_infos = _CHECKPOINT_SHARDS.get(active_cp.checkpoint_id, [])
 
                 result = await dp.commit_checkpoint(
                     checkpoint_id=active_cp.checkpoint_id,
@@ -343,13 +345,23 @@ def _register_routes(application: FastAPI) -> None:
 
                 _CHECKPOINT_DURATIONS.append(time.monotonic() - checkpoint_start)
                 logger.info("Checkpoint %s committed to data plane", active_cp.checkpoint_id)
+
+                # Clean up tracked shard infos to prevent memory leak
+                _CHECKPOINT_SHARDS.pop(active_cp.checkpoint_id, None)
             except HTTPException:
                 raise
             except Exception as exc:
                 logger.warning("Data plane commit call failed: %s", exc)
+                _CHECKPOINT_SHARDS.pop(active_cp.checkpoint_id, None)
+
+        # Mark the checkpoint as COMMITTED in the coordinator
+        if active_cp:
+            coord.update_checkpoint_state(active_cp.checkpoint_id, "COMMITTED")
 
         try:
-            status = coord.transition_run(run_id, RunState.COMMITTED)
+            coord.transition_run(run_id, RunState.COMMITTED)
+            # Auto-resume back to RUNNING so the next checkpoint can be triggered
+            status = coord.transition_run(run_id, RunState.RUNNING)
         except InvalidTransitionError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
 
@@ -381,7 +393,9 @@ def _register_routes(application: FastAPI) -> None:
             if status.state == RunState.FAILED:
                 coord.transition_run(run_id, RunState.RECOVERING)
                 status = coord.transition_run(run_id, RunState.RUNNING)
-            elif status.state in (RunState.COMMITTED, RunState.CREATED):
+            elif status.state == RunState.RUNNING:
+                pass  # Already running — no-op for idempotent resume
+            elif status.state in (RunState.COMMITTED, RunState.CREATED, RunState.CHECKPOINTING):
                 status = coord.transition_run(run_id, RunState.RUNNING)
             else:
                 raise InvalidTransitionError(status.state, RunState.RUNNING)
@@ -389,6 +403,24 @@ def _register_routes(application: FastAPI) -> None:
             raise HTTPException(status_code=409, detail=str(exc))
 
         _publish_event(request, run_id, "run_resumed", status.model_dump_json())
+        return status
+
+    @application.post("/api/runs/{run_id}/fail", response_model=RunStatus, tags=["runs"])
+    async def fail_run(run_id: str, request: Request) -> RunStatus:
+        """Manually fail a run (for demo/testing)."""
+        coord = _get_coordinator(request)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        reason = body.get("reason", "Manual failure trigger")
+        try:
+            status = coord.set_run_error(run_id, reason)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+        except InvalidTransitionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        _publish_event(request, run_id, "run_failed", status.model_dump_json())
         return status
 
     @application.get(
@@ -446,6 +478,111 @@ def _register_routes(application: FastAPI) -> None:
         if info is None:
             raise HTTPException(status_code=404, detail=f"Checkpoint {checkpoint_id!r} not found")
         return info
+
+    # -- shard data transfer ------------------------------------------------
+
+    @application.post(
+        "/api/runs/{run_id}/checkpoints/{checkpoint_id}/shards/{shard_id}",
+        tags=["checkpoints"],
+    )
+    async def upload_shard(
+        run_id: str, checkpoint_id: str, shard_id: str, request: Request,
+    ) -> dict:
+        """Receive shard bytes from SDK and stream them to the data plane via gRPC."""
+        dp = _get_dp_client(request)
+        if not dp or not dp.connected:
+            raise HTTPException(status_code=503, detail="Data plane not available")
+
+        coord = _get_coordinator(request)
+        cp = coord.get_checkpoint(checkpoint_id)
+        if cp is None:
+            raise HTTPException(status_code=404, detail=f"Checkpoint {checkpoint_id!r} not found")
+
+        body = await request.body()
+        rank = int(request.headers.get("X-Shard-Rank", "0"))
+
+        # Stream the data to the data plane in 4MB chunks
+        chunk_size = 4 * 1024 * 1024
+
+        # ShardChunk proto doesn't carry run_id, so we encode it as
+        # "{run_id}/{checkpoint_id}" in the checkpoint_id field.  The Rust
+        # data plane splits on '/' to recover both values.
+        composite_cp_id = f"{run_id}/{checkpoint_id}"
+
+        async def chunk_iterator():
+            offset = 0
+            while offset < len(body):
+                end = min(offset + chunk_size, len(body))
+                yield ShardChunk(
+                    shard_id=shard_id,
+                    checkpoint_id=composite_cp_id,
+                    offset=offset,
+                    data=body[offset:end],
+                    is_last=(end >= len(body)),
+                )
+                offset = end
+
+        result = await dp.write_shard(chunk_iterator())
+
+        # Track shard info for commit — use the same content-addressed key
+        # format as the Rust data plane writer (writer.rs:content_addressed_key)
+        storage_key = (
+            f"{run_id}/{checkpoint_id}/"
+            f"sha256-{result.sha256_checksum[:16]}-{shard_id}.bin"
+        )
+        shard_info = GrpcShardInfo(
+            shard_id=shard_id,
+            rank=rank,
+            size_bytes=result.total_bytes,
+            sha256=result.sha256_checksum,
+            storage_key=storage_key,
+        )
+        _CHECKPOINT_SHARDS.setdefault(checkpoint_id, []).append(shard_info)
+
+        # Update checkpoint metadata
+        existing_shards = _CHECKPOINT_SHARDS.get(checkpoint_id, [])
+        coord.update_checkpoint_state(
+            checkpoint_id,
+            "IN_PROGRESS",
+            num_shards=len(existing_shards),
+            total_bytes=sum(s.size_bytes for s in existing_shards),
+            shard_ids=[s.shard_id for s in existing_shards],
+        )
+
+        logger.info(
+            "Shard uploaded: shard_id=%s checkpoint=%s bytes=%d sha256=%s",
+            shard_id, checkpoint_id, result.total_bytes, result.sha256_checksum[:16],
+        )
+
+        return {
+            "shard_id": result.shard_id,
+            "total_bytes": result.total_bytes,
+            "sha256_checksum": result.sha256_checksum,
+            "success": result.success,
+        }
+
+    @application.get(
+        "/api/runs/{run_id}/checkpoints/{checkpoint_id}/shards/{shard_id}",
+        tags=["checkpoints"],
+    )
+    async def download_shard(
+        run_id: str, checkpoint_id: str, shard_id: str, request: Request,
+    ) -> Response:
+        """Download shard bytes from the data plane back to the SDK."""
+        dp = _get_dp_client(request)
+        if not dp or not dp.connected:
+            raise HTTPException(status_code=503, detail="Data plane not available")
+
+        restore_start = time.monotonic()
+        chunks: list[bytes] = []
+        async for chunk in dp.read_shard(shard_id, checkpoint_id, run_id):
+            chunks.append(chunk.data)
+        _RESTORE_DURATIONS.append(time.monotonic() - restore_start)
+
+        if not chunks:
+            raise HTTPException(status_code=404, detail=f"Shard {shard_id} has no data")
+
+        return Response(content=b"".join(chunks), media_type="application/octet-stream")
 
     # -- workers ------------------------------------------------------------
 
@@ -522,12 +659,14 @@ def _register_routes(application: FastAPI) -> None:
         runs = coord.list_runs()
         active = sum(1 for r in runs if r.state in {RunState.RUNNING, RunState.CHECKPOINTING})
 
+        dp = _get_dp_client(request)
         return HealthStatus(
             status=HealthStatusLevel.HEALTHY,
             version="0.2.0",
             uptime_seconds=round(coord.uptime_seconds, 2),
             active_runs=active,
             etcd_connected=coord.etcd_connected,
+            dataplane_connected=bool(dp and dp.connected),
         )
 
     @application.get("/api/metrics/summary", response_model=MetricsSummary, tags=["ops"])
@@ -667,10 +806,11 @@ def _register_routes(application: FastAPI) -> None:
         # Aggregate checkpoint durations as latency data
         latency_data = []
         for i, duration in enumerate(_CHECKPOINT_DURATIONS[-30:]):
+            restore = _RESTORE_DURATIONS[i] if i < len(_RESTORE_DURATIONS) else 0.0
             latency_data.append({
                 "index": i,
                 "save": round(duration, 3),
-                "restore": round(duration * 0.5, 3),
+                "restore": round(restore, 3),
             })
 
         # Get summary metrics for throughput
@@ -685,6 +825,56 @@ def _register_routes(application: FastAPI) -> None:
             "total_checkpoint_bytes": total_bytes,
             "checkpoint_count": len(_CHECKPOINT_DURATIONS),
         }
+
+    # -- demo control -------------------------------------------------------
+
+    @application.post("/api/demo/kill-worker/{container_name}", tags=["demo"])
+    async def demo_kill_worker(container_name: str) -> dict:
+        """Kill a Docker container by name (for live demo)."""
+        import subprocess
+
+        # Only allow killing known worker containers
+        ALLOWED_CONTAINERS = {"ckpt-worker-0", "ckpt-worker-1"}
+        if container_name not in ALLOWED_CONTAINERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Container {container_name!r} not in allowed list: {ALLOWED_CONTAINERS}",
+            )
+
+        try:
+            kill_result = subprocess.run(
+                ["docker", "kill", container_name],
+                capture_output=True, text=True, timeout=10,
+            )
+            if kill_result.returncode != 0:
+                return {"killed": container_name, "success": False, "output": kill_result.stderr.strip()}
+
+            # Auto-restart the container after a brief delay so
+            # the worker can recover from the latest checkpoint.
+            import asyncio
+
+            async def _restart():
+                await asyncio.sleep(3)
+                subprocess.run(
+                    ["docker", "start", container_name],
+                    capture_output=True, text=True, timeout=10,
+                )
+                logger.info("Auto-restarted %s after kill", container_name)
+
+            asyncio.create_task(_restart())
+
+            return {
+                "killed": container_name,
+                "success": True,
+                "output": kill_result.stdout.strip(),
+            }
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=503,
+                detail="Docker CLI not available in this container",
+            )
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail="Docker kill timed out")
 
 
 # ---------------------------------------------------------------------------

@@ -312,7 +312,7 @@ class Coordinator:
             info.total_bytes = total_bytes
         if shard_ids is not None:
             info.shard_ids = shard_ids
-        if state == "COMMITTED":
+        if state == "COMMITTED" and info.committed_at is None:
             info.committed_at = datetime.now(timezone.utc)
 
         self._kv.put(

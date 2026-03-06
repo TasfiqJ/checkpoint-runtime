@@ -148,6 +148,52 @@ class RuntimeClient:
     def heartbeat(self, worker_id: str, step: int = 0) -> dict[str, Any]:
         return self._post(f"/api/workers/{worker_id}/heartbeat", json={"step": step})
 
+    # -- shard data transfer ------------------------------------------------
+
+    def save_shard(
+        self,
+        run_id: str,
+        checkpoint_id: str,
+        shard_id: str,
+        data: bytes,
+        rank: int = 0,
+    ) -> dict[str, Any]:
+        """Upload shard bytes to the data plane via the control plane."""
+        response = self._client.post(
+            f"/api/runs/{run_id}/checkpoints/{checkpoint_id}/shards/{shard_id}",
+            content=data,
+            headers={
+                "Content-Type": "application/octet-stream",
+                "X-Shard-Rank": str(rank),
+            },
+            timeout=120.0,
+        )
+        return self._handle_response(response)
+
+    def load_shard(
+        self,
+        run_id: str,
+        checkpoint_id: str,
+        shard_id: str,
+    ) -> bytes:
+        """Download shard bytes from the data plane via the control plane."""
+        response = self._client.get(
+            f"/api/runs/{run_id}/checkpoints/{checkpoint_id}/shards/{shard_id}",
+            timeout=120.0,
+        )
+        if response.status_code >= 400:
+            try:
+                detail = response.json().get("detail", response.text)
+            except Exception:
+                detail = response.text
+            if response.status_code == 404:
+                raise RunNotFoundError(detail, status_code=404)
+            raise SDKError(
+                f"HTTP {response.status_code}: {detail}",
+                status_code=response.status_code,
+            )
+        return response.content
+
     # -- health & metrics ---------------------------------------------------
 
     def health(self) -> dict[str, Any]:
@@ -168,14 +214,18 @@ class RuntimeClient:
 
     @staticmethod
     def _handle_response(response: httpx.Response) -> Any:
-        if response.status_code == 404:
-            detail = response.json().get("detail", "Not found")
-            raise RunNotFoundError(detail, status_code=404)
-        if response.status_code == 409:
-            detail = response.json().get("detail", "Conflict")
-            raise StateTransitionError(detail, status_code=409)
         if response.status_code >= 400:
-            detail = response.text
+            # Safely extract detail from JSON body, fall back to raw text
+            try:
+                body = response.json()
+                detail = body.get("detail", response.text)
+            except Exception:
+                detail = response.text
+
+            if response.status_code == 404:
+                raise RunNotFoundError(detail, status_code=404)
+            if response.status_code == 409:
+                raise StateTransitionError(detail, status_code=409)
             raise SDKError(
                 f"HTTP {response.status_code}: {detail}",
                 status_code=response.status_code,

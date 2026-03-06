@@ -80,17 +80,22 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
 
         let (_checksum, _total_bytes) = hasher.finalize();
 
-        // Extract run_id from checkpoint_id pattern
-        let run_id = checkpoint_id
-            .split('/')
-            .next()
-            .unwrap_or("unknown")
-            .to_string();
+        // ShardChunk doesn't carry run_id, so the Python control plane
+        // encodes it as "run_id/checkpoint_id" in the checkpoint_id field.
+        let (run_id, real_checkpoint_id) = if let Some(pos) = checkpoint_id.find('/') {
+            (
+                checkpoint_id[..pos].to_string(),
+                checkpoint_id[pos + 1..].to_string(),
+            )
+        } else {
+            // Fallback: use checkpoint_id as run_id (legacy behavior)
+            (checkpoint_id.clone(), checkpoint_id.clone())
+        };
 
         // Write shard with retry for transient S3 failures
         let writer = self.writer.clone();
         let run_id_clone = run_id.clone();
-        let checkpoint_id_clone = checkpoint_id.clone();
+        let checkpoint_id_clone = real_checkpoint_id.clone();
         let shard_id_clone = shard_id.clone();
         let retry = RetryPolicy::new(3, 500);
         let result = retry

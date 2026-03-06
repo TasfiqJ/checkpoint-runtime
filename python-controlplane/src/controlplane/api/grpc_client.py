@@ -112,13 +112,16 @@ class DataPlaneClient:
                 )
 
         response = await self._stub.WriteShard(_request_iterator())
-        return WriteShardResult(
+        result = WriteShardResult(
             shard_id=response.shard_id,
             total_bytes=response.total_bytes,
             sha256_checksum=response.sha256_checksum,
             success=response.success,
             error_message=getattr(response, "error_message", ""),
         )
+        if not result.success:
+            raise RuntimeError(f"WriteShard failed: {result.error_message}")
+        return result
 
     async def read_shard(
         self, shard_id: str, checkpoint_id: str, run_id: str,

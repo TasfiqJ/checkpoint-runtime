@@ -4,8 +4,10 @@ import RunDetailPage from './pages/RunDetailPage';
 import CheckpointBrowser from './pages/CheckpointBrowser';
 import HealthPage from './pages/HealthPage';
 import PerformancePage from './pages/PerformancePage';
+import DemoPage from './pages/DemoPage';
 
 const navItems = [
+  { to: '/demo', label: 'Live Demo' },
   { to: '/', label: 'Runs' },
   { to: '/checkpoints', label: 'Checkpoints' },
   { to: '/health', label: 'Health' },
@@ -16,7 +18,7 @@ function App() {
   const location = useLocation();
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/' || location.pathname.startsWith('/runs');
+    if (path === '/') return location.pathname === '/' || (location.pathname.startsWith('/runs') && !location.pathname.startsWith('/demo'));
     return location.pathname.startsWith(path);
   };
 
@@ -53,6 +55,7 @@ function App() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
         <Routes>
           <Route path="/" element={<RunsPage />} />
+          <Route path="/demo" element={<DemoPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
           <Route path="/checkpoints" element={<CheckpointBrowser />} />
           <Route path="/health" element={<HealthPage />} />
