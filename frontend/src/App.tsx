@@ -95,7 +95,7 @@ function App() {
           animate={menuOpen ? 'open' : 'closed'}
           variants={UNDERLAY_VARIANTS}
           style={{ top: 16, right: 16 }}
-          className="fixed z-40 rounded-xl bg-surface-1/20 backdrop-blur-md border border-line/20 shadow-glow"
+          className="fixed z-40 rounded-xl bg-surface-1/5 border border-line/10"
         />
 
         {/* Hamburger button */}
