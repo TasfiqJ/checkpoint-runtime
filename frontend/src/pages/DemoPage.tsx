@@ -237,15 +237,15 @@ export default function DemoPage() {
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-extrabold text-txt-1 tracking-tight leading-tight">
-            Crash a real server.
+            I built this so you can break it.
             <br />
-            <span className="gradient-text">Watch it recover automatically.</span>
+            <span className="gradient-text">Watch it recover on its own.</span>
           </h1>
 
           <p className="text-txt-2 text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed">
-            This is a <span className="text-txt-1 font-medium">live demo</span> of fault-tolerant AI training infrastructure.
-            Two real servers are training a model right now on a cloud machine in Virginia.
-            You'll crash one on purpose and see the system recover with zero data loss.
+            I set up two <span className="text-txt-1 font-medium">real servers</span> training an AI model right now
+            on a cloud machine in Virginia. You'll crash one on purpose and see my system
+            detect the failure, restart the server, and recover — with zero data loss.
           </p>
 
           <button

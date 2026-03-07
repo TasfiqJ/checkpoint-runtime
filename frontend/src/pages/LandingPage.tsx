@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import ArchitectureDiagram from '../components/ArchitectureDiagram';
 import VisitorStats from '../components/VisitorStats';
 
-/** Firecrawl-style section counter: [ 01 / 07 ] · LABEL */
+/** Firecrawl-style section counter: [ 01 / 09 ] · LABEL */
 function SectionCounter({ num, total, label }: { num: number; total: number; label: string }) {
   return (
     <div className="section-counter">
@@ -16,6 +17,8 @@ function SectionCounter({ num, total, label }: { num: number; total: number; lab
     </div>
   );
 }
+
+const TOTAL = 9;
 
 const TECH_STACK = [
   { label: 'Rust', color: 'bg-recover/10 text-recover border-recover/20' },
@@ -32,7 +35,36 @@ const TECH_STACK = [
   { label: 'OpenTelemetry', color: 'bg-surface-3 text-txt-2 border-line' },
 ];
 
+const QA_ITEMS = [
+  {
+    q: 'What would you do differently if you started over?',
+    a: 'I\'d start with the state machine and etcd coordination layer before writing a single line of training code. I spent a lot of time debugging timing issues because I built the training loop first and bolted coordination on later. The state machine is the heart of the system — everything else flows from "what state is the run in right now?" Starting there would have saved me weeks.',
+  },
+  {
+    q: 'How does this compare to what companies like Meta actually use?',
+    a: 'The architecture pattern is the same — control plane / data plane split, async checkpointing, content-addressed storage — but at a different scale. Meta\'s systems handle thousands of GPUs across data centers with dedicated hardware for checkpoint storage. Mine runs on a single 4-vCPU VPS with 2 CPU-only workers. The engineering principles are identical though: atomic commits, heartbeat-based failure detection, manifest-driven recovery. I built this to prove I understand the architecture, not to compete with their scale.',
+  },
+  {
+    q: 'What was the hardest bug you ran into?',
+    a: 'Worker rank incrementing after kill/restart cycles. After killing and restarting workers, PyTorch DDP would assign new ranks (0,1 → 2,3 → 5,6) instead of reusing the old ones. The frontend was matching workers by rank index, so after a kill cycle the UI would show the wrong workers. I had to redesign the frontend to sort workers by active status and most recent heartbeat instead of relying on rank numbers.',
+  },
+  {
+    q: 'Why not just use an existing checkpoint library?',
+    a: 'Libraries like PyTorch\'s built-in checkpointing just serialize model weights to a file. They don\'t handle the hard parts: When do you save? How do you coordinate multiple workers? What if the save itself fails? How do you detect a dead worker? How do you resume from the right checkpoint? I wanted to build the full coordination system — the orchestration layer that makes checkpointing actually reliable in a distributed setting.',
+  },
+  {
+    q: 'How would this work at real scale — thousands of GPUs?',
+    a: 'The architecture scales horizontally. The control plane would need to be replicated for availability (multiple FastAPI instances behind a load balancer, with etcd handling consensus). The Rust data plane already handles concurrent shard uploads, so you\'d run multiple data plane instances close to storage. The biggest change would be sharding strategy — instead of one shard per rank, you\'d want hierarchical checkpointing where each node saves locally first, then async-uploads to durable storage. The state machine and coordination protocol wouldn\'t change at all.',
+  },
+  {
+    q: 'What did you learn from building this?',
+    a: 'The biggest lesson was that distributed systems fail in ways you can\'t predict, so you have to design for failure from the start — not as an afterthought. I also learned that the "boring" parts (state machines, heartbeats, retry logic) are what make the system actually work. The flashy parts (Rust, gRPC, streaming) are implementation details. If your coordination is wrong, nothing else matters.',
+  },
+];
+
 export default function LandingPage() {
+  const [openQA, setOpenQA] = useState<number | null>(null);
+
   return (
     <div className="min-h-screen bg-surface-0">
       {/* ── Hero ─────────────────────────────────────────────────── */}
@@ -47,20 +79,20 @@ export default function LandingPage() {
 
         <div className="relative max-w-4xl mx-auto px-5 pt-28 pb-16 text-center">
           <p className="text-sm font-semibold text-brand-violet uppercase tracking-widest mb-6">
-            Distributed Systems Engineering Project
+            A Portfolio Project by Tasfiq
           </p>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-txt-1 tracking-tight leading-[1.1]">
-            What happens when a machine
+            I asked myself: what happens
             <br />
-            <span className="gradient-text">crashes mid-training?</span>
+            <span className="gradient-text">when a machine crashes mid-training?</span>
           </h1>
 
           <p className="mt-8 text-xl text-txt-2 max-w-2xl mx-auto leading-relaxed">
             Training AI models can take hours or days across many machines.
             If one machine dies, all progress is lost.{' '}
-            <span className="text-txt-1 font-medium">I built a system that saves progress automatically
-            and recovers instantly</span> — so no work is ever lost.
+            <span className="text-txt-1 font-medium">This is my answer — a fault-tolerant checkpoint runtime
+            I designed and built from scratch</span> that saves progress automatically and recovers instantly.
           </p>
 
           <div className="mt-10 flex items-center justify-center gap-4">
@@ -74,7 +106,7 @@ export default function LandingPage() {
               </svg>
             </Link>
             <a
-              href="#how-i-solved-it"
+              href="#why-i-built-this"
               className="btn-ghost cursor-pointer inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150"
             >
               How I Built It
@@ -86,14 +118,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── The Problem (simple analogy) ─────────────────────────── */}
-      <section className="max-w-4xl mx-auto px-5 pt-12 pb-16">
-        <SectionCounter num={1} total={7} label="The Problem" />
+      {/* ── Why I Built This ───────────────────────────────────── */}
+      <section id="why-i-built-this" className="max-w-4xl mx-auto px-5 pt-12 pb-16">
+        <SectionCounter num={1} total={TOTAL} label="Origin" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
-          The Problem
+          Why I Built This
         </h2>
         <p className="text-base text-txt-3 mb-10 max-w-xl">
-          Why this matters in real-world AI infrastructure
+          The problem that made me want to build something real
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -105,19 +137,20 @@ export default function LandingPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-err">Without Checkpointing</h3>
+              <h3 className="text-lg font-bold text-err">The Problem I Kept Seeing</h3>
             </div>
             <div className="space-y-3 text-base text-txt-2 leading-relaxed">
               <p>
-                Imagine writing a 50-page essay for 8 hours — then your computer crashes
-                and you never saved. <span className="text-err font-medium">You start from page 1.</span>
+                I was reading about how Meta and Google train models across thousands of GPUs, and the same problem
+                kept coming up: <span className="text-err font-medium">hardware fails all the time at scale.</span>
               </p>
               <p>
-                That's what happens during AI training. Companies run training jobs across
-                dozens of machines for days. One hardware failure = everything is gone.
+                Imagine writing a 50-page essay for 8 hours — then your computer crashes
+                and you never saved. You start from page 1. That's what happens during
+                AI training when a machine dies without checkpointing.
               </p>
               <p className="text-txt-3 text-sm">
-                At scale, this wastes thousands of dollars in compute time per failure.
+                At scale, a single failure can waste thousands of dollars in compute time.
               </p>
             </div>
           </div>
@@ -130,17 +163,18 @@ export default function LandingPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-ok">With This System</h3>
+              <h3 className="text-lg font-bold text-ok">What I Built to Solve It</h3>
             </div>
             <div className="space-y-3 text-base text-txt-2 leading-relaxed">
               <p>
-                The system automatically saves a snapshot of everything the AI has learned —
+                So I built a system that automatically saves a snapshot of everything the AI has learned —
                 every 50 training steps. Like hitting{' '}
                 <span className="text-ok font-medium">Ctrl+S every few seconds.</span>
               </p>
               <p>
-                When a machine crashes, the system detects it, restarts the machine,
-                loads the last save, and <span className="text-ok font-medium">picks up right where it left off.</span>
+                When a machine crashes, the system detects it through missed heartbeats, restarts the machine,
+                loads the last save from object storage, and{' '}
+                <span className="text-ok font-medium">picks up right where it left off.</span>
               </p>
               <p className="text-txt-3 text-sm">
                 Zero data loss. Automatic recovery. No human intervention needed.
@@ -150,14 +184,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── How I Solved It ──────────────────────────────────────── */}
-      <section id="how-i-solved-it" className="max-w-4xl mx-auto px-5 py-16">
-        <SectionCounter num={2} total={7} label="Engineering" />
+      {/* ── My Engineering Decisions ──────────────────────────── */}
+      <section id="engineering" className="max-w-4xl mx-auto px-5 py-16">
+        <SectionCounter num={2} total={TOTAL} label="Engineering" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
-          How I Built It
+          My Engineering Decisions
         </h2>
         <p className="text-base text-txt-3 mb-12 max-w-xl">
-          The key engineering decisions behind this system
+          Why I made each technical choice — not just what I used
         </p>
 
         <div className="space-y-6">
@@ -169,14 +203,16 @@ export default function LandingPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-txt-1 mb-2">
-                  Split the system into a Control Plane and Data Plane
+                  I split the system into a Control Plane and Data Plane
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  The <span className="text-info font-medium">Control Plane</span> (Python) acts as the brain — it decides{' '}
-                  <em>when</em> to save, tracks which machines are alive, and manages the training lifecycle.
-                  The <span className="text-recover font-medium">Data Plane</span> (Rust) handles the heavy lifting — it{' '}
-                  <em>actually moves</em> gigabytes of data to storage as fast as possible. Separating these two concerns
-                  means each can be optimized independently, just like how real infrastructure at companies like Meta works.
+                  I chose this because it mirrors how real infrastructure at companies like Meta works.
+                  The <span className="text-info font-medium">Control Plane</span> (Python/FastAPI) is the brain — it decides{' '}
+                  <em>when</em> to save, tracks which machines are alive via etcd leases, and manages the training lifecycle
+                  through an 8-state machine.
+                  The <span className="text-recover font-medium">Data Plane</span> (Rust) does the heavy lifting — it{' '}
+                  <em>actually moves</em> checkpoint data to S3 storage via gRPC streaming as fast as possible.
+                  Separating these concerns means each can be optimized independently.
                 </p>
               </div>
             </div>
@@ -190,13 +226,14 @@ export default function LandingPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-txt-1 mb-2">
-                  Wrote the Data Plane in Rust for speed
+                  I wrote the Data Plane in Rust for speed and safety
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  The bottleneck is moving training data to storage. Rust gives zero-overhead async I/O
+                  I could have done everything in Python, but the bottleneck in checkpointing is I/O —
+                  moving gigabytes of model weights to storage. Rust gives me zero-overhead async I/O via Tokio
                   and memory safety without a garbage collector. The result: checkpoint data streams to S3 storage
                   via gRPC at near-wire speed, with SHA-256 checksums verifying every byte. If a write fails,
-                  built-in retry logic with exponential backoff handles it automatically.
+                  built-in retry logic with exponential backoff and jitter handles it automatically.
                 </p>
               </div>
             </div>
@@ -210,9 +247,10 @@ export default function LandingPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-txt-1 mb-2">
-                  Used an 8-state machine to coordinate everything
+                  I used an 8-state machine to coordinate everything
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
+                  The hardest part wasn't writing the training loop — it was coordinating everything around it.
                   The system tracks every training run through 8 possible states:{' '}
                   <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded text-txt-2 font-mono">
                     CREATED → RUNNING → CHECKPOINTING → COMMITTED
@@ -221,8 +259,8 @@ export default function LandingPage() {
                   <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded text-txt-2 font-mono">
                     FAILED → RECOVERING → RUNNING
                   </code>.
-                  This state machine, stored in etcd (a distributed key-value store), means every component
-                  in the system always knows exactly what's happening — even across multiple machines.
+                  This state machine lives in etcd (a distributed key-value store), so every component
+                  always knows exactly what's happening — even across multiple machines.
                 </p>
               </div>
             </div>
@@ -236,14 +274,15 @@ export default function LandingPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-txt-1 mb-2">
-                  Made it real — not a mock or simulation
+                  I made it real — not a mock or simulation
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  Everything runs as 11 real Docker containers on a cloud server in Virginia.
-                  Real PyTorch models train across workers. Real data saves to real object storage (MinIO, S3-compatible).
+                  Anyone can draw architecture diagrams. I wanted to actually run it. Everything runs as
+                  11 real Docker containers on a cloud server in Virginia. Real PyTorch models train across workers.
+                  Real checkpoint data saves to real object storage (MinIO, S3-compatible).
                   When you click "Kill" in the demo, it sends{' '}
                   <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded text-txt-2 font-mono">docker kill</code>{' '}
-                  to a real container — not a simulation. The recovery you see is the actual system doing its job.
+                  to a real container — the recovery you see is the actual system doing its job.
                 </p>
               </div>
             </div>
@@ -251,14 +290,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── What the Demo Actually Does ──────────────────────────── */}
+      {/* ── What the Live Demo Shows ──────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
-        <SectionCounter num={3} total={7} label="Live Demo" />
+        <SectionCounter num={3} total={TOTAL} label="Live Demo" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
-          What the Live Demo Shows You
+          I Built This Demo So You Can Break It
         </h2>
         <p className="text-base text-txt-3 mb-12 max-w-xl">
-          Three steps to see fault-tolerant recovery in action
+          Three steps — takes about 30 seconds
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -269,7 +308,7 @@ export default function LandingPage() {
             <h3 className="text-lg font-bold text-txt-1">Training Starts</h3>
             <p className="text-base text-txt-2 leading-relaxed">
               Two real servers begin training an AI model together.
-              You'll see the step counter climbing and checkpoints saving automatically.
+              You'll see the step counter climbing and checkpoints saving automatically every 50 steps.
             </p>
           </div>
 
@@ -282,7 +321,7 @@ export default function LandingPage() {
               Click the Kill button to destroy one of the training servers.
               This sends a real{' '}
               <code className="text-xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">docker kill</code>{' '}
-              command — the container actually dies.
+              command — the container actually dies on the server in Virginia.
             </p>
           </div>
 
@@ -292,7 +331,7 @@ export default function LandingPage() {
             </div>
             <h3 className="text-lg font-bold text-txt-1">It Recovers Itself</h3>
             <p className="text-base text-txt-2 leading-relaxed">
-              The system detects the crash, restarts the server, loads the last checkpoint
+              The system detects the crash via missed heartbeats, restarts the server, loads the last checkpoint
               from storage, and resumes training — all automatically in under 5 seconds.
             </p>
           </div>
@@ -311,14 +350,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── What's Actually Running ──────────────────────────────── */}
+      {/* ── What's Actually Running ──────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
-        <SectionCounter num={4} total={7} label="Infrastructure" />
+        <SectionCounter num={4} total={TOTAL} label="Infrastructure" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
-          What's Running Right Now
+          What's Actually Running Right Now
         </h2>
         <p className="text-base text-txt-3 mb-10 max-w-xl">
-          This isn't frontend magic — 11 real services are running on a cloud server
+          This isn't a mock-up — 11 real Docker containers are running on a VPS I provisioned
         </p>
 
         <div className="card p-6 space-y-6">
@@ -364,32 +403,116 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Architecture Diagram ─────────────────────────────────── */}
+      {/* ── Architecture Diagram ─────────────────────────────── */}
       <section id="architecture" className="max-w-4xl mx-auto px-5 py-16">
-        <SectionCounter num={5} total={7} label="Architecture" />
+        <SectionCounter num={5} total={TOTAL} label="Architecture" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
           System Architecture
         </h2>
         <p className="text-base text-txt-3 mb-10 max-w-xl">
-          How the 11 services connect to each other
+          How I connected the 11 services together
         </p>
         <ArchitectureDiagram />
       </section>
 
-      {/* ── Not Frontend Magic ───────────────────────────────────── */}
+      {/* ── Designing for Failure ─────────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
-        <SectionCounter num={6} total={7} label="Proof" />
+        <SectionCounter num={6} total={TOTAL} label="Reliability" />
+        <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
+          Designing for Failure, Not Perfection
+        </h2>
+        <p className="text-base text-txt-3 mb-12 max-w-xl">
+          The question I kept asking was: what if THIS part fails?
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Atomic commits */}
+          <div className="card p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-info-muted flex items-center justify-center">
+                <svg className="w-4.5 h-4.5 text-info" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-txt-1">Atomic Checkpoint Commits</h3>
+            </div>
+            <p className="text-sm text-txt-2 leading-relaxed">
+              What if the system crashes halfway through saving a checkpoint? I solved this with the manifest pattern:
+              all data shards are written first, and a manifest file is written last as the "commit signal." If the manifest
+              doesn't exist, the checkpoint is incomplete and gets ignored. No half-written saves, ever.
+            </p>
+          </div>
+
+          {/* Heartbeat detection */}
+          <div className="card p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-err-muted flex items-center justify-center">
+                <svg className="w-4.5 h-4.5 text-err" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-txt-1">Heartbeat-Based Failure Detection</h3>
+            </div>
+            <p className="text-sm text-txt-2 leading-relaxed">
+              How do you know a machine is dead vs. just slow? Each worker sends heartbeats to etcd with a TTL lease.
+              If heartbeats stop, the lease expires and the control plane knows that worker is gone — not guessing,
+              not polling, just a clean timeout. This is the same pattern used in production Kubernetes clusters.
+            </p>
+          </div>
+
+          {/* Content-addressed storage */}
+          <div className="card p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-warn-muted flex items-center justify-center">
+                <svg className="w-4.5 h-4.5 text-warn" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-txt-1">Content-Addressed Storage</h3>
+            </div>
+            <p className="text-sm text-txt-2 leading-relaxed">
+              What if the same shard gets uploaded twice? Each file is named by its SHA-256 hash — so
+              identical data always maps to the same key. This makes writes idempotent: if a retry re-uploads
+              the same shard, it just overwrites with identical content. No duplicates, no corruption, no wasted storage.
+            </p>
+          </div>
+
+          {/* Backpressure */}
+          <div className="card p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-recover-muted flex items-center justify-center">
+                <svg className="w-4.5 h-4.5 text-recover" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-txt-1">Backpressure & Flow Control</h3>
+            </div>
+            <p className="text-sm text-txt-2 leading-relaxed">
+              What if checkpoints come in faster than storage can handle? The Rust data plane uses a bounded queue.
+              If the queue fills up, it pushes back on the control plane to slow down — instead of crashing with
+              out-of-memory errors. This is the same pattern used in TCP flow control and production message queues.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Proof It's Real ───────────────────────────────────── */}
+      <section className="max-w-4xl mx-auto px-5 py-16">
+        <SectionCounter num={7} total={TOTAL} label="Proof" />
         <div className="card p-8 border-brand-violet/20">
-          <h2 className="text-2xl font-bold text-txt-1 text-center mb-6">
+          <h2 className="text-2xl font-bold text-txt-1 text-center mb-3">
             "How do I know this isn't just a fancy animation?"
           </h2>
+          <p className="text-base text-txt-3 text-center mb-6">
+            I get this question. Here's how you can verify everything is real:
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex items-start gap-3">
               <svg className="w-5 h-5 text-ok flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <p className="text-base text-txt-2">
-                <span className="text-txt-1 font-medium">The demo panel shows real Docker logs</span> — you can see actual container
+                <span className="text-txt-1 font-medium">The demo panel shows real Docker logs</span> — actual container
                 output streaming in real-time, not pre-recorded text
               </p>
             </div>
@@ -425,14 +548,54 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Tech Stack ───────────────────────────────────────────── */}
+      {/* ── Q&A ──────────────────────────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
-        <SectionCounter num={7} total={7} label="Stack" />
+        <SectionCounter num={8} total={TOTAL} label="Q&A" />
+        <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
+          Questions I'd Want to Ask
+        </h2>
+        <p className="text-base text-txt-3 mb-10 max-w-xl">
+          If I were reading someone's project, these are the questions I'd have
+        </p>
+
+        <div className="space-y-3">
+          {QA_ITEMS.map((item, i) => {
+            const isOpen = openQA === i;
+            return (
+              <div key={i} className="card overflow-hidden">
+                <button
+                  onClick={() => setOpenQA(isOpen ? null : i)}
+                  className="w-full flex items-center justify-between gap-4 p-5 text-left cursor-pointer hover:bg-surface-2/50 transition-colors"
+                >
+                  <span className="text-base font-semibold text-txt-1">{item.q}</span>
+                  <svg
+                    className={`w-5 h-5 text-txt-3 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {isOpen && (
+                  <div className="px-5 pb-5 pt-0">
+                    <p className="text-base text-txt-2 leading-relaxed">{item.a}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Tech Stack ───────────────────────────────────────── */}
+      <section className="max-w-4xl mx-auto px-5 py-16">
+        <SectionCounter num={9} total={TOTAL} label="Stack" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-3">
           Tech Stack
         </h2>
         <p className="text-base text-txt-3 mb-8">
-          Production-grade technologies used across the system
+          Technologies I used across the system
         </p>
         <div className="flex flex-wrap justify-center gap-2">
           {TECH_STACK.map((tech) => (
@@ -446,15 +609,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Visitor Stats ────────────────────────────────────────── */}
+      {/* ── Visitor Stats ────────────────────────────────────── */}
       <section className="max-w-sm mx-auto px-5 py-12">
         <VisitorStats />
       </section>
 
-      {/* ── Footer CTA ───────────────────────────────────────────── */}
+      {/* ── Footer CTA ───────────────────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-20 text-center">
         <div className="space-y-6">
-          <h2 className="text-3xl font-bold text-txt-1">See it in action</h2>
+          <h2 className="text-3xl font-bold text-txt-1">Want to see it break and recover?</h2>
           <p className="text-base text-txt-2 max-w-md mx-auto">
             Crash a real server and watch it recover. The live demo takes 30 seconds.
           </p>

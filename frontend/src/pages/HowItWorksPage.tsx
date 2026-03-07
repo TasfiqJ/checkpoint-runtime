@@ -6,7 +6,7 @@ export default function HowItWorksPage() {
           How It Works
         </h1>
         <p className="text-sm text-txt-2 mt-2 leading-relaxed">
-          A detailed walkthrough of every backend component, what it does, and why it exists.
+          A detailed walkthrough of every component I built, what it does, and why I designed it that way.
         </p>
       </header>
 
