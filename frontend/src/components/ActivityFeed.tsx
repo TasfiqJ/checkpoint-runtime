@@ -39,29 +39,27 @@ export default function ActivityFeed() {
   }, []);
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-2">
-        <span className="text-[10px] font-mono bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">feed</span>
-        <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-          Activity
-        </h4>
+    <div className="card overflow-hidden">
+      <div className="panel-header">
+        <span className="panel-tag">feed</span>
+        <h4 className="panel-title">Activity</h4>
       </div>
 
       <div className="max-h-48 overflow-y-auto">
         {items.length === 0 ? (
-          <div className="px-3 py-4 text-xs text-gray-600 text-center">
+          <div className="px-3 py-4 text-xs text-text-tertiary text-center">
             No activity yet...
           </div>
         ) : (
-          <div className="divide-y divide-gray-800/50">
+          <div className="divide-y divide-border-subtle">
             {items.slice(0, 15).map((item, i) => (
               <div
                 key={`${item.timestamp}-${i}`}
-                className="flex items-start gap-2 px-3 py-1.5 text-[11px]"
+                className="flex items-start gap-2 px-3.5 py-2 text-[11px]"
               >
                 <span className="text-sm flex-shrink-0 mt-px">{item.flag}</span>
-                <span className="text-gray-300 flex-1">{item.message}</span>
-                <span className="text-[10px] text-gray-600 flex-shrink-0 whitespace-nowrap">
+                <span className="text-text-secondary flex-1">{item.message}</span>
+                <span className="text-2xs text-text-tertiary flex-shrink-0 whitespace-nowrap">
                   {timeAgo(item.timestamp)}
                 </span>
               </div>

@@ -35,18 +35,18 @@ export default function DemoWalkthrough({ currentStep }: Props) {
   const num = Math.min(currentStep, STEPS.length - 1);
 
   return (
-    <div className="bg-gray-900/80 backdrop-blur border border-gray-700 rounded-xl p-4">
-      {/* Progress dots */}
+    <div className="card-elevated p-4">
+      {/* Progress bar */}
       <div className="flex items-center gap-3 mb-3">
-        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+        <span className="text-2xs font-semibold text-text-tertiary uppercase tracking-wider">
           Step {num + 1}/{STEPS.length}
         </span>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1">
           {STEPS.map((_, i) => (
             <div
               key={i}
-              className={`w-2 h-2 rounded-full transition-colors ${
-                i <= num ? 'bg-indigo-500' : 'bg-gray-700'
+              className={`h-1 rounded-full transition-all duration-300 ${
+                i <= num ? 'w-6 bg-accent' : 'w-2 bg-surface-3'
               }`}
             />
           ))}
@@ -54,8 +54,8 @@ export default function DemoWalkthrough({ currentStep }: Props) {
       </div>
 
       {/* Current step */}
-      <h4 className="text-sm font-semibold text-gray-100 mb-1">{step.title}</h4>
-      <p className="text-xs text-gray-400 leading-relaxed">{step.description}</p>
+      <h4 className="text-sm font-semibold text-text-primary mb-1">{step.title}</h4>
+      <p className="text-xs text-text-secondary leading-relaxed">{step.description}</p>
     </div>
   );
 }

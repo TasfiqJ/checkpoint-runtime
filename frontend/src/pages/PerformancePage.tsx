@@ -5,6 +5,8 @@ import {
 } from 'recharts';
 import type { MetricsSummary } from '../types';
 import { API_BASE } from '../config/api';
+import { formatBytes } from '../design';
+import { SectionHeader, MetricCard, ErrorBanner, Loading } from '../components/ui';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,27 +22,18 @@ interface PerformanceData {
   checkpoint_count: number;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
-}
-
 // ── Utilisation bar ──────────────────────────────────────────────────────────
 
 function UtilBar({ label, pct, color }: { label: string; pct: number; color: string }) {
-  const barColor = pct > 80 ? 'bg-red-500' : pct > 60 ? 'bg-yellow-500' : color;
+  const barColor = pct > 80 ? 'bg-state-failed' : pct > 60 ? 'bg-state-checkpoint' : color;
   return (
     <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-gray-300">{label}</span>
-        <span className="text-gray-500">{pct}%</span>
+      <div className="flex justify-between text-xs mb-1.5">
+        <span className="text-text-secondary">{label}</span>
+        <span className="text-text-tertiary font-mono">{pct}%</span>
       </div>
-      <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
-        <div className={`h-2 rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+      <div className="w-full h-1.5 bg-surface-3 rounded-full overflow-hidden">
+        <div className={`h-1.5 rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -57,11 +50,11 @@ interface CustomTooltipProps {
 function DarkTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 shadow-lg text-xs">
-      <p className="text-gray-400 mb-1">{label}</p>
+    <div className="bg-surface-3 border border-border-emphasis rounded-lg px-3 py-2 shadow-xl text-xs">
+      <p className="text-text-tertiary mb-1">#{label}</p>
       {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}: {p.value.toFixed(2)}
+        <p key={p.name} style={{ color: p.color }} className="font-mono">
+          {p.name}: {p.value.toFixed(2)}s
         </p>
       ))}
     </div>
@@ -84,10 +77,7 @@ function PerformancePage() {
       ]);
       if (!metricsRes.ok) throw new Error(`Metrics: ${metricsRes.status} ${metricsRes.statusText}`);
       setMetrics(await metricsRes.json());
-
-      if (perfRes.ok) {
-        setPerfData(await perfRes.json());
-      }
+      if (perfRes.ok) setPerfData(await perfRes.json());
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to fetch metrics');
@@ -102,168 +92,147 @@ function PerformancePage() {
     return () => clearInterval(id);
   }, [fetchData]);
 
-  // ── Render ─────────────────────────────────────────────────────────────
-
-  if (loading) {
-    return <div className="flex items-center justify-center py-20 text-gray-500 text-sm">Loading metrics...</div>;
-  }
+  if (loading) return <Loading text="Loading metrics..." />;
 
   const latencyData = perfData?.latency ?? [];
   const hasLatencyData = latencyData.length > 0;
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-100">Performance Metrics</h2>
-        <p className="mt-1 text-sm text-gray-400">
-          Checkpoint save/restore throughput, latency, and resource utilization.
-        </p>
-      </div>
+      <SectionHeader
+        title="Performance Metrics"
+        subtitle="Checkpoint save/restore throughput, latency, and resource utilization."
+      />
 
-      {error && (
-        <div className="mb-4 text-sm text-red-400 bg-red-900/30 border border-red-800 rounded-lg px-4 py-3">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBanner message={error} />}
 
       {/* Key metric cards */}
       {metrics && (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-          <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-            <p className="text-xs text-gray-400">Total Runs</p>
-            <p className="text-2xl font-bold text-gray-100 mt-1">{metrics.total_runs}</p>
-          </div>
-          <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-            <p className="text-xs text-gray-400">Active Runs</p>
-            <p className="text-2xl font-bold text-indigo-400 mt-1">{metrics.active_runs}</p>
-          </div>
-          <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-            <p className="text-xs text-gray-400">Total Checkpoints</p>
-            <p className="text-2xl font-bold text-gray-100 mt-1">{metrics.total_checkpoints}</p>
-          </div>
-          <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-            <p className="text-xs text-gray-400">Checkpoint Size</p>
-            <p className="text-2xl font-bold text-gray-100 mt-1">{formatBytes(metrics.total_checkpoint_bytes)}</p>
-          </div>
-          <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-            <p className="text-xs text-gray-400">Active Workers</p>
-            <p className="text-2xl font-bold text-gray-100 mt-1">
-              {metrics.active_workers} / {metrics.total_workers}
-            </p>
-          </div>
-          <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-            <p className="text-xs text-gray-400">Success Rate</p>
-            <p className={`text-2xl font-bold mt-1 ${metrics.checkpoint_success_rate >= 0.95 ? 'text-green-400' : metrics.checkpoint_success_rate >= 0.8 ? 'text-yellow-400' : 'text-red-400'}`}>
-              {(metrics.checkpoint_success_rate * 100).toFixed(1)}%
-            </p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          <MetricCard label="Total Runs" value={metrics.total_runs} />
+          <MetricCard label="Active Runs" value={metrics.active_runs} valueColor="text-accent" />
+          <MetricCard label="Total Checkpoints" value={metrics.total_checkpoints} />
+          <MetricCard label="Checkpoint Size" value={formatBytes(metrics.total_checkpoint_bytes)} />
+          <MetricCard label="Active Workers" value={`${metrics.active_workers} / ${metrics.total_workers}`} />
+          <MetricCard
+            label="Success Rate"
+            value={`${(metrics.checkpoint_success_rate * 100).toFixed(1)}%`}
+            valueColor={
+              metrics.checkpoint_success_rate >= 0.95 ? 'text-state-running' :
+              metrics.checkpoint_success_rate >= 0.8 ? 'text-state-checkpoint' :
+              'text-state-failed'
+            }
+          />
         </div>
       )}
 
       {/* Latency chart */}
-      <div className="bg-gray-900 rounded-lg border border-gray-800 p-6 mb-8">
-        <h3 className="text-lg font-semibold text-gray-100 mb-4">Checkpoint Latency Over Time</h3>
+      <div className="card p-5 mb-6">
+        <h3 className="text-sm font-semibold text-text-primary mb-4">Checkpoint Latency Over Time</h3>
         {hasLatencyData ? (
           <>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={latencyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                  <XAxis dataKey="index" tick={{ fill: '#6b7280', fontSize: 11 }} stroke="#374151" />
-                  <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} stroke="#374151" unit="s" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e1e28" />
+                  <XAxis dataKey="index" tick={{ fill: '#55556a', fontSize: 10 }} stroke="#1e1e28" />
+                  <YAxis tick={{ fill: '#55556a', fontSize: 10 }} stroke="#1e1e28" unit="s" />
                   <Tooltip content={<DarkTooltip />} />
-                  <Line type="monotone" dataKey="save" name="Save" stroke="#818cf8" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="restore" name="Restore" stroke="#34d399" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="save" name="Save" stroke="#818cf8" strokeWidth={1.5} dot={false} />
+                  <Line type="monotone" dataKey="restore" name="Restore" stroke="#34d399" strokeWidth={1.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex items-center gap-6 mt-3 text-xs text-gray-500">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-0.5 bg-indigo-400 inline-block rounded" /> Save Latency
+            <div className="flex items-center gap-5 mt-3">
+              <span className="flex items-center gap-1.5 text-2xs text-text-tertiary">
+                <span className="w-3 h-0.5 bg-accent-hover inline-block rounded" /> Save Latency
               </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-0.5 bg-green-400 inline-block rounded" /> Restore Latency
+              <span className="flex items-center gap-1.5 text-2xs text-text-tertiary">
+                <span className="w-3 h-0.5 bg-state-running inline-block rounded" /> Restore Latency
               </span>
             </div>
           </>
         ) : (
-          <div className="h-64 flex items-center justify-center text-gray-500 text-sm">
+          <div className="h-64 flex items-center justify-center text-text-tertiary text-sm">
             No checkpoint latency data yet. Trigger a checkpoint to see metrics.
           </div>
         )}
       </div>
 
-      {/* Throughput info */}
-      <div className="bg-gray-900 rounded-lg border border-gray-800 p-6 mb-8">
-        <h3 className="text-lg font-semibold text-gray-100 mb-4">Throughput</h3>
+      {/* Throughput */}
+      <div className="card p-5 mb-6">
+        <h3 className="text-sm font-semibold text-text-primary mb-4">Throughput</h3>
         {perfData && perfData.checkpoint_count > 0 ? (
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-gray-400">Total Data Written</p>
-              <p className="text-2xl font-bold text-gray-100 mt-1">{formatBytes(perfData.total_checkpoint_bytes)}</p>
+              <p className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">Total Data Written</p>
+              <p className="text-2xl font-semibold text-text-primary mt-1 font-mono">{formatBytes(perfData.total_checkpoint_bytes)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">Checkpoints Completed</p>
-              <p className="text-2xl font-bold text-gray-100 mt-1">{perfData.checkpoint_count}</p>
+              <p className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">Checkpoints Completed</p>
+              <p className="text-2xl font-semibold text-text-primary mt-1 font-mono">{perfData.checkpoint_count}</p>
             </div>
           </div>
         ) : (
-          <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
+          <div className="h-24 flex items-center justify-center text-text-tertiary text-sm">
             No throughput data yet. Complete a checkpoint cycle to see metrics.
           </div>
         )}
       </div>
 
       {/* External links */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
         <a
           href="http://localhost:3001"
           target="_blank"
           rel="noopener noreferrer"
-          className="bg-gray-900 rounded-lg border border-gray-800 p-5 hover:border-indigo-700 transition-colors group"
+          className="card p-4 hover:border-accent/30 transition-colors group cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="text-sm font-semibold text-gray-100 group-hover:text-indigo-400 transition-colors">
+              <h4 className="text-sm font-semibold text-text-primary group-hover:text-accent-hover transition-colors">
                 Grafana Dashboards
               </h4>
-              <p className="text-xs text-gray-500 mt-1">Full metrics dashboards with custom panels</p>
+              <p className="text-2xs text-text-tertiary mt-1">Full metrics dashboards with custom panels</p>
             </div>
-            <span className="text-gray-600 group-hover:text-indigo-400 transition-colors">&rarr;</span>
+            <svg className="w-4 h-4 text-text-tertiary group-hover:text-accent transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
           </div>
-          <p className="text-xs text-gray-600 font-mono mt-2">localhost:3001</p>
+          <p className="text-2xs text-text-tertiary font-mono mt-2">localhost:3001</p>
         </a>
         <a
           href="http://localhost:16686"
           target="_blank"
           rel="noopener noreferrer"
-          className="bg-gray-900 rounded-lg border border-gray-800 p-5 hover:border-indigo-700 transition-colors group"
+          className="card p-4 hover:border-accent/30 transition-colors group cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="text-sm font-semibold text-gray-100 group-hover:text-indigo-400 transition-colors">
+              <h4 className="text-sm font-semibold text-text-primary group-hover:text-accent-hover transition-colors">
                 Jaeger Tracing
               </h4>
-              <p className="text-xs text-gray-500 mt-1">Distributed trace viewer for checkpoint operations</p>
+              <p className="text-2xs text-text-tertiary mt-1">Distributed trace viewer for checkpoint operations</p>
             </div>
-            <span className="text-gray-600 group-hover:text-indigo-400 transition-colors">&rarr;</span>
+            <svg className="w-4 h-4 text-text-tertiary group-hover:text-accent transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
           </div>
-          <p className="text-xs text-gray-600 font-mono mt-2">localhost:16686</p>
+          <p className="text-2xs text-text-tertiary font-mono mt-2">localhost:16686</p>
         </a>
       </div>
 
-      {/* Resource utilisation — from metrics summary */}
-      <div className="bg-gray-900 rounded-lg border border-gray-800 p-6">
-        <h3 className="text-lg font-semibold text-gray-100 mb-4">Resource Utilization</h3>
+      {/* Resource utilisation */}
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-text-primary mb-4">Resource Utilization</h3>
         {metrics ? (
           <div className="space-y-4">
-            <UtilBar label="Workers Active" pct={metrics.total_workers > 0 ? Math.round((metrics.active_workers / metrics.total_workers) * 100) : 0} color="bg-indigo-500" />
-            <UtilBar label="Checkpoint Success" pct={Math.round(metrics.checkpoint_success_rate * 100)} color="bg-green-500" />
-            <UtilBar label="Active Runs" pct={metrics.total_runs > 0 ? Math.round((metrics.active_runs / metrics.total_runs) * 100) : 0} color="bg-indigo-500" />
+            <UtilBar label="Workers Active" pct={metrics.total_workers > 0 ? Math.round((metrics.active_workers / metrics.total_workers) * 100) : 0} color="bg-accent" />
+            <UtilBar label="Checkpoint Success" pct={Math.round(metrics.checkpoint_success_rate * 100)} color="bg-state-running" />
+            <UtilBar label="Active Runs" pct={metrics.total_runs > 0 ? Math.round((metrics.active_runs / metrics.total_runs) * 100) : 0} color="bg-accent" />
           </div>
         ) : (
-          <div className="text-gray-500 text-sm">No resource data available.</div>
+          <div className="text-text-tertiary text-sm">No resource data available.</div>
         )}
       </div>
     </div>

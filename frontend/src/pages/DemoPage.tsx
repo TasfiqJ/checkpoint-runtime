@@ -8,33 +8,8 @@ import SystemInfo from '../components/SystemInfo';
 import DemoWalkthrough from '../components/DemoWalkthrough';
 import VisitorStats from '../components/VisitorStats';
 import ActivityFeed from '../components/ActivityFeed';
-
-// ── State colours ───────────────────────────────────────────────────────────
-
-const STATE_STYLES: Record<RunState, string> = {
-  CREATED:       'bg-gray-700/50 text-gray-300',
-  RUNNING:       'bg-green-900/50 text-green-400',
-  CHECKPOINTING: 'bg-yellow-900/50 text-yellow-400',
-  COMMITTED:     'bg-blue-900/50 text-blue-400',
-  FAILED:        'bg-red-900/50 text-red-400',
-  RECOVERING:    'bg-orange-900/50 text-orange-400',
-  CANCELLED:     'bg-gray-700/50 text-gray-400',
-  COMPLETED:     'bg-blue-900/50 text-blue-400',
-};
-
-const STATE_DOT: Record<string, string> = {
-  ACTIVE: 'bg-green-400',
-  DEAD: 'bg-red-500',
-  DRAINING: 'bg-yellow-400',
-};
-
-function StateBadge({ state }: { state: RunState }) {
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATE_STYLES[state] ?? 'bg-gray-700/50 text-gray-300'}`}>
-      {state}
-    </span>
-  );
-}
+import { RUN_STATE_CONFIG, WORKER_DOT, formatBytes, shortId } from '../design';
+import { RunBadge, MetricCard, LiveDot } from '../components/ui';
 
 // ── Timeline event ──────────────────────────────────────────────────────────
 
@@ -45,19 +20,29 @@ interface TimelineEvent {
 }
 
 const EVENT_COLORS = {
-  info: 'border-blue-500 bg-blue-500/10 text-blue-300',
-  success: 'border-green-500 bg-green-500/10 text-green-300',
-  warning: 'border-yellow-500 bg-yellow-500/10 text-yellow-300',
-  error: 'border-red-500 bg-red-500/10 text-red-300',
+  info: 'border-l-state-committed bg-state-committed-muted text-state-committed',
+  success: 'border-l-state-running bg-state-running-muted text-state-running',
+  warning: 'border-l-state-checkpoint bg-state-checkpoint-muted text-state-checkpoint',
+  error: 'border-l-state-failed bg-state-failed-muted text-state-failed',
 };
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
+const STATUS_HEADLINE: Partial<Record<RunState, string>> = {
+  RUNNING: 'Training in Progress',
+  FAILED: 'Worker Failure Detected',
+  RECOVERING: 'Recovering from Checkpoint...',
+  CHECKPOINTING: 'Saving Checkpoint...',
+  COMMITTED: 'Checkpoint Committed',
+};
+
+// ── State-specific left border class ────────────────────────────────────────
+
+const STATE_BORDER: Partial<Record<RunState, string>> = {
+  RUNNING: 'border-l-state-running',
+  FAILED: 'border-l-state-failed',
+  RECOVERING: 'border-l-state-recovery',
+  CHECKPOINTING: 'border-l-state-checkpoint',
+  COMMITTED: 'border-l-state-committed',
+};
 
 // ── Main DemoPage ───────────────────────────────────────────────────────────
 
@@ -100,7 +85,7 @@ export default function DemoPage() {
 
           // Detect state changes and add timeline events
           if (prevStateRef.current && prevStateRef.current !== data.state) {
-            const label = `Run state: ${prevStateRef.current} → ${data.state}`;
+            const label = `Run state: ${prevStateRef.current} \u2192 ${data.state}`;
             const type = data.state === 'FAILED' ? 'error'
               : data.state === 'RECOVERING' ? 'warning'
               : data.state === 'RUNNING' && (prevStateRef.current === 'RECOVERING' || prevStateRef.current === 'COMMITTED') ? 'success'
@@ -136,7 +121,7 @@ export default function DemoPage() {
               );
               // Walkthrough auto-advance
               if (checkpointCountRef.current === 0) {
-                setWalkthroughStep(1); // first checkpoint → step 2
+                setWalkthroughStep(1); // first checkpoint -> step 2
               }
               if (cps.filter(c => c.state === 'COMMITTED').length >= 2 && !hasKilled) {
                 setWalkthroughStep(2); // ready to kill
@@ -217,7 +202,6 @@ export default function DemoPage() {
   const totalBytes = committedCheckpoints.reduce((sum, cp) => sum + cp.total_bytes, 0);
 
   // Get the two most relevant workers: prefer ACTIVE, then most recent heartbeat.
-  // After kill/restart cycles, rank increments so we can't match by rank index.
   const relevantWorkers = [...workers]
     .sort((a, b) => {
       if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
@@ -226,75 +210,143 @@ export default function DemoPage() {
     })
     .slice(0, 2);
 
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-100">Live Demo</h2>
-          <p className="text-sm text-gray-400 mt-1">
-            Watch fault-tolerant checkpointing in action. Kill a worker and see automatic recovery.
+  const stateConfig = run ? (RUN_STATE_CONFIG[run.state] ?? RUN_STATE_CONFIG.CREATED) : RUN_STATE_CONFIG.CREATED;
+  const borderClass = run ? (STATE_BORDER[run.state] ?? 'border-l-border') : 'border-l-border';
+
+  // ── Pre-start hero ──────────────────────────────────────────────────────────
+
+  if (!runId && !starting) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 space-y-10">
+        {/* Hero */}
+        <div className="text-center space-y-5">
+          <h1 className="text-3xl font-bold text-text-primary tracking-tight">
+            Fault-Tolerant Distributed Checkpointing
+          </h1>
+          <p className="text-text-secondary text-sm max-w-xl mx-auto leading-relaxed">
+            Watch a production-grade checkpoint runtime save ML training state to a distributed
+            data plane. Kill a worker and see automatic recovery from the last committed checkpoint.
           </p>
-        </div>
-        {!runId && (
           <button
             onClick={handleStart}
             disabled={starting}
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded-lg transition-colors text-lg"
+            className="btn-primary px-8 py-3.5 text-base"
           >
-            {starting ? 'Connecting...' : 'Start Demo'}
+            Start Demo
           </button>
-        )}
-      </div>
+        </div>
 
-      {/* Walkthrough (shown after starting) */}
+        {/* 3-step instruction cards */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="card p-5 space-y-3">
+            <div className="w-8 h-8 rounded-lg bg-state-running-muted flex items-center justify-center text-state-running font-mono font-bold text-sm">
+              1
+            </div>
+            <p className="text-sm font-medium text-text-primary">Start Demo</p>
+            <p className="text-2xs text-text-tertiary leading-relaxed">
+              Workers begin training and periodically save checkpoints through the data plane to S3.
+            </p>
+          </div>
+          <div className="card p-5 space-y-3">
+            <div className="w-8 h-8 rounded-lg bg-state-failed-muted flex items-center justify-center text-state-failed font-mono font-bold text-sm">
+              2
+            </div>
+            <p className="text-sm font-medium text-text-primary">Kill a Worker</p>
+            <p className="text-2xs text-text-tertiary leading-relaxed">
+              Click "Kill" to simulate a node failure. The control plane detects the missed heartbeats.
+            </p>
+          </div>
+          <div className="card p-5 space-y-3">
+            <div className="w-8 h-8 rounded-lg bg-state-committed-muted flex items-center justify-center text-state-committed font-mono font-bold text-sm">
+              3
+            </div>
+            <p className="text-sm font-medium text-text-primary">Watch Recovery</p>
+            <p className="text-2xs text-text-tertiary leading-relaxed">
+              The worker automatically restarts, loads the last checkpoint from S3, and resumes training.
+            </p>
+          </div>
+        </div>
+
+        {/* Proof panels grid */}
+        <div className="space-y-3">
+          <p className="text-2xs text-text-tertiary text-center uppercase tracking-widest">
+            Live infrastructure &mdash; not a simulation
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <VisitorStats />
+            <ActivityFeed />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <SystemInfo />
+            <ContainerStatus />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="card p-4">
+              <div className="panel-header mb-2">
+                <span className="panel-tag">stdout</span>
+                <h4 className="panel-title">Live Logs</h4>
+              </div>
+              <p className="text-2xs text-text-tertiary">Available after starting demo</p>
+            </div>
+            <StorageBrowser active={false} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Connecting state ────────────────────────────────────────────────────────
+
+  if (!runId && starting) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <svg className="animate-spin h-6 w-6 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <p className="text-sm text-text-secondary">Connecting to training workers...</p>
+      </div>
+    );
+  }
+
+  // ── Running state (2-column mission control) ──────────────────────────────
+
+  return (
+    <div className="space-y-4">
+      {/* Walkthrough bar */}
       {runId && <DemoWalkthrough currentStep={walkthroughStep} />}
 
       {runId && run && (
         <div className="flex gap-4">
           {/* ─── Left Column: Main Demo ─── */}
           <div className="flex-1 min-w-0 space-y-4">
+
             {/* Status Banner */}
-            <div className={`rounded-xl border p-4 ${
-              run.state === 'RUNNING' ? 'border-green-800 bg-green-950/30' :
-              run.state === 'FAILED' ? 'border-red-800 bg-red-950/30' :
-              run.state === 'RECOVERING' ? 'border-orange-800 bg-orange-950/30' :
-              run.state === 'CHECKPOINTING' ? 'border-yellow-800 bg-yellow-950/30' :
-              'border-gray-800 bg-gray-900/30'
-            }`}>
-              <div className="flex items-center justify-between">
+            <div className={`card-elevated border-l-2 ${borderClass} overflow-hidden`}>
+              <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full animate-pulse ${
-                    run.state === 'RUNNING' ? 'bg-green-400' :
-                    run.state === 'FAILED' ? 'bg-red-500' :
-                    run.state === 'RECOVERING' ? 'bg-orange-400' :
-                    'bg-yellow-400'
-                  }`} />
+                  <div className={`w-3 h-3 rounded-full animate-pulse ${stateConfig.dot}`} />
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-100">
-                      {run.state === 'RUNNING' ? 'Training in Progress' :
-                       run.state === 'FAILED' ? 'Worker Failure Detected' :
-                       run.state === 'RECOVERING' ? 'Recovering from Checkpoint...' :
-                       run.state === 'CHECKPOINTING' ? 'Saving Checkpoint...' :
-                       run.state}
+                    <h3 className="text-base font-semibold text-text-primary">
+                      {STATUS_HEADLINE[run.state] ?? run.state}
                     </h3>
-                    <p className="text-xs text-gray-400">
-                      Run {run.run_id.slice(0, 8)} &middot; Step {run.current_step}
+                    <p className="text-2xs text-text-tertiary font-mono">
+                      Run {shortId(run.run_id, 8)} &middot; Step {run.current_step}
                     </p>
                   </div>
                 </div>
-                <StateBadge state={run.state} />
+                <RunBadge state={run.state} size="md" />
               </div>
             </div>
 
             {/* Recovery Success Banner */}
             {recoveryBanner && (
-              <div className="rounded-xl border border-green-500 bg-green-950/40 p-4 animate-pulse">
+              <div className="card-elevated border border-state-running/30 bg-state-running-muted p-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">&#10003;</span>
+                  <LiveDot />
                   <div>
-                    <p className="text-green-300 font-semibold">Recovery Successful</p>
-                    <p className="text-green-400/70 text-sm">
+                    <p className="text-state-running text-sm font-semibold">Recovery Successful</p>
+                    <p className="text-text-tertiary text-2xs">
                       Training resumed from last checkpoint. No data was lost.
                     </p>
                   </div>
@@ -302,63 +354,49 @@ export default function DemoPage() {
               </div>
             )}
 
-            {/* Stats Cards */}
+            {/* Metric Cards */}
             <div className="grid grid-cols-4 gap-3">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Training Step</p>
-                <p className="text-xl font-mono font-bold text-gray-100 mt-1">{run.current_step}</p>
-              </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Checkpoints</p>
-                <p className="text-xl font-mono font-bold text-gray-100 mt-1">{committedCheckpoints.length}</p>
-              </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Data Saved</p>
-                <p className="text-xl font-mono font-bold text-gray-100 mt-1">{formatBytes(totalBytes)}</p>
-              </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Active Workers</p>
-                <p className="text-xl font-mono font-bold text-gray-100 mt-1">
-                  {workers.filter(w => w.status === 'ACTIVE').length}/2
-                </p>
-              </div>
+              <MetricCard label="Training Step" value={run.current_step} />
+              <MetricCard label="Checkpoints" value={committedCheckpoints.length} />
+              <MetricCard label="Data Saved" value={formatBytes(totalBytes)} />
+              <MetricCard
+                label="Active Workers"
+                value={`${workers.filter(w => w.status === 'ACTIVE').length}/2`}
+              />
             </div>
 
             {/* Workers + Kill Buttons */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-gray-100 mb-3">Training Workers</h3>
+            <div className="card p-4">
+              <h3 className="panel-title mb-3">Training Workers</h3>
               <div className="grid grid-cols-2 gap-3">
                 {['ckpt-worker-0', 'ckpt-worker-1'].map((container, idx) => {
                   const worker = relevantWorkers[idx];
                   const isAlive = worker?.status === 'ACTIVE';
+                  const dotColor = WORKER_DOT[worker?.status ?? 'DEAD'] ?? 'bg-state-neutral';
 
                   return (
                     <div
                       key={container}
-                      className={`rounded-lg border p-3 ${
-                        isAlive
-                          ? 'border-green-800/50 bg-green-950/20'
-                          : 'border-red-800/50 bg-red-950/20'
-                      }`}
+                      className="card px-3 py-3"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2.5 h-2.5 rounded-full ${STATE_DOT[worker?.status ?? 'DEAD'] ?? 'bg-gray-500'}`} />
+                        <div className="flex items-center gap-2.5">
+                          <span className={`w-2 h-2 rounded-full ${dotColor}`} />
                           <div>
-                            <p className="text-sm font-medium text-gray-200">Worker {idx}</p>
-                            <p className="text-[10px] text-gray-500 font-mono">{container}</p>
+                            <p className="text-sm font-medium text-text-primary">Worker {idx}</p>
+                            <p className="text-2xs text-text-tertiary font-mono">{container}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3">
                           {worker && (
-                            <span className="text-[10px] text-gray-400">
+                            <span className="text-2xs text-text-tertiary font-mono">
                               Step {worker.current_step}
                             </span>
                           )}
                           <button
                             onClick={() => handleKillWorker(container)}
                             disabled={killing !== null || !isAlive}
-                            className="px-2.5 py-1 bg-red-900/50 hover:bg-red-800 disabled:bg-gray-800 disabled:text-gray-600 text-red-300 text-xs font-medium rounded-md transition-colors"
+                            className="btn-danger px-2.5 py-1 text-2xs"
                           >
                             {killing === container ? 'Killing...' : 'Kill'}
                           </button>
@@ -370,19 +408,19 @@ export default function DemoPage() {
               </div>
             </div>
 
-            {/* Recovery Timeline */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-gray-100 mb-3">Event Timeline</h3>
+            {/* Event Timeline */}
+            <div className="card p-4">
+              <h3 className="panel-title mb-3">Event Timeline</h3>
               {timeline.length === 0 ? (
-                <p className="text-xs text-gray-500">Events will appear here as they happen...</p>
+                <p className="text-2xs text-text-tertiary">Events will appear here as they happen...</p>
               ) : (
                 <div className="space-y-1.5 max-h-56 overflow-y-auto">
                   {timeline.map((event, i) => (
                     <div
                       key={i}
-                      className={`flex items-start gap-2 px-2 py-1.5 rounded-md border-l-2 ${EVENT_COLORS[event.type]}`}
+                      className={`flex items-start gap-2 px-2.5 py-1.5 rounded-md border-l-2 ${EVENT_COLORS[event.type]}`}
                     >
-                      <span className="text-[10px] font-mono text-gray-500 whitespace-nowrap mt-0.5">
+                      <span className="text-2xs font-mono text-text-tertiary whitespace-nowrap mt-0.5">
                         +{(event.time / 1000).toFixed(1)}s
                       </span>
                       <span className="text-xs">{event.label}</span>
@@ -394,22 +432,22 @@ export default function DemoPage() {
 
             {/* Checkpoint History */}
             {committedCheckpoints.length > 0 && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <h3 className="text-sm font-semibold text-gray-100 mb-3">Checkpoint History</h3>
+              <div className="card p-4">
+                <h3 className="panel-title mb-3">Checkpoint History</h3>
                 <div className="space-y-1.5">
                   {committedCheckpoints.slice(-8).reverse().map(cp => (
                     <div
                       key={cp.checkpoint_id}
-                      className="flex items-center justify-between px-2 py-1.5 bg-gray-800/50 rounded-md"
+                      className="flex items-center justify-between px-2.5 py-1.5 bg-surface-2 rounded-md"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                        <span className="text-xs text-gray-300">Step {cp.step}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-state-committed" />
+                        <span className="text-xs text-text-secondary">Step {cp.step}</span>
                       </div>
-                      <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                      <div className="flex items-center gap-3 text-2xs text-text-tertiary">
                         <span>{cp.num_shards} shard{cp.num_shards !== 1 ? 's' : ''}</span>
                         <span>{formatBytes(cp.total_bytes)}</span>
-                        <span className="font-mono">{cp.checkpoint_id.slice(0, 8)}</span>
+                        <span className="font-mono">{shortId(cp.checkpoint_id, 8)}</span>
                       </div>
                     </div>
                   ))}
@@ -426,64 +464,6 @@ export default function DemoPage() {
             <ContainerStatus />
             <LogStream active={!!runId} />
             <StorageBrowser active={!!runId} />
-          </div>
-        </div>
-      )}
-
-      {/* Instructions (before starting) */}
-      {!runId && !starting && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-          <h3 className="text-xl font-semibold text-gray-100 mb-4">
-            Fault-Tolerant Distributed Checkpointing
-          </h3>
-          <div className="max-w-2xl mx-auto space-y-4 text-gray-400 text-sm">
-            <p>
-              This demo showcases a production-grade checkpoint runtime that saves ML training
-              state to a distributed data plane. When a worker fails, training automatically
-              resumes from the last committed checkpoint.
-            </p>
-            <div className="grid grid-cols-3 gap-6 mt-8 text-left">
-              <div className="space-y-2">
-                <div className="w-8 h-8 rounded-lg bg-green-900/50 flex items-center justify-center text-green-400 font-bold">1</div>
-                <p className="font-medium text-gray-200">Start Demo</p>
-                <p className="text-xs">Workers begin training and periodically save checkpoints through the data plane to S3.</p>
-              </div>
-              <div className="space-y-2">
-                <div className="w-8 h-8 rounded-lg bg-red-900/50 flex items-center justify-center text-red-400 font-bold">2</div>
-                <p className="font-medium text-gray-200">Kill a Worker</p>
-                <p className="text-xs">Click "Kill" to simulate a node failure. The control plane detects the missed heartbeats.</p>
-              </div>
-              <div className="space-y-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-900/50 flex items-center justify-center text-blue-400 font-bold">3</div>
-                <p className="font-medium text-gray-200">Watch Recovery</p>
-                <p className="text-xs">The worker automatically restarts, loads the last checkpoint from S3, and resumes training from where it left off.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Proof panels are still visible before starting */}
-          <div className="mt-8 pt-6 border-t border-gray-800">
-            <p className="text-xs text-gray-500 mb-4">
-              These panels show live infrastructure data — not a simulation
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left mb-3">
-              <VisitorStats />
-              <ActivityFeed />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left mb-3">
-              <SystemInfo />
-              <ContainerStatus />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                <div className="px-1 py-1 flex items-center gap-2">
-                  <span className="text-[10px] font-mono bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">stdout</span>
-                  <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Live Logs</h4>
-                </div>
-                <p className="text-[10px] text-gray-500 mt-2">Available after starting demo</p>
-              </div>
-              <StorageBrowser active={false} />
-            </div>
           </div>
         </div>
       )}

@@ -61,15 +61,13 @@ export default function VisitorStats() {
   if (!data) return null;
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-2">
-        <span className="text-[10px] font-mono bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">live</span>
-        <h4 className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
-          Watching Now
-        </h4>
+    <div className="card overflow-hidden">
+      <div className="panel-header">
+        <span className="panel-tag">live</span>
+        <h4 className="panel-title">Watching Now</h4>
         <span className="ml-auto flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-sm font-mono font-bold text-gray-100">
+          <span className="w-1.5 h-1.5 rounded-full bg-state-running animate-pulse" />
+          <span className="text-sm font-mono font-semibold text-text-primary">
             {data.total_visitors}
           </span>
         </span>
@@ -80,12 +78,12 @@ export default function VisitorStats() {
           {data.countries.map((c) => (
             <span
               key={c.country_code}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-800/60 rounded text-[11px] text-gray-300"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-surface-3 rounded text-[11px] text-text-secondary"
               title={`${c.country}: ${c.count}`}
             >
               <span className="text-sm">{c.flag}</span>
               {c.count > 1 && (
-                <span className="text-[10px] text-gray-500">{c.count}</span>
+                <span className="text-2xs text-text-tertiary">{c.count}</span>
               )}
             </span>
           ))}

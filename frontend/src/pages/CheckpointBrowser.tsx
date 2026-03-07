@@ -1,38 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { RunStatus, CheckpointInfo, CheckpointState } from '../types';
+import type { RunStatus, CheckpointInfo } from '../types';
 import { API_BASE } from '../config/api';
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-const CKPT_STATE_STYLES: Record<CheckpointState, string> = {
-  PENDING:     'bg-gray-700/50 text-gray-300',
-  IN_PROGRESS: 'bg-yellow-900/50 text-yellow-400',
-  COMMITTED:   'bg-green-900/50 text-green-400',
-  FAILED:      'bg-red-900/50 text-red-400',
-};
-
-function CkptBadge({ state }: { state: CheckpointState }) {
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${CKPT_STATE_STYLES[state] ?? 'bg-gray-700/50 text-gray-300'}`}>
-      {state}
-    </span>
-  );
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return iso;
-  }
-}
+import { formatBytes, formatDate, shortId } from '../design';
+import { CkptBadge, SectionHeader, MetricCard, ErrorBanner, Loading, EmptyState } from '../components/ui';
 
 // ── Expandable row ───────────────────────────────────────────────────────────
 
@@ -42,43 +12,43 @@ function CheckpointRow({ ckpt }: { ckpt: CheckpointInfo }) {
   return (
     <>
       <tr
-        className="hover:bg-gray-800/30 transition-colors cursor-pointer"
+        className="hover:bg-surface-2/50 transition-colors cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-          <span className="inline-block w-4 text-gray-600 mr-1">{expanded ? '\u25BE' : '\u25B8'}</span>
-          <span className="font-mono text-gray-300">
-            {ckpt.checkpoint_id.length > 16 ? ckpt.checkpoint_id.slice(0, 16) + '\u2026' : ckpt.checkpoint_id}
+        <td className="table-cell text-text-tertiary">
+          <span className="inline-block w-4 text-text-tertiary/50 mr-1">{expanded ? '\u25BE' : '\u25B8'}</span>
+          <span className="font-mono text-text-secondary text-xs">
+            {shortId(ckpt.checkpoint_id, 16)}
           </span>
         </td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">{ckpt.run_id.slice(0, 12)}</td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">{ckpt.step.toLocaleString()}</td>
-        <td className="px-6 py-4 whitespace-nowrap"><CkptBadge state={ckpt.state} /></td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{ckpt.num_shards}</td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{formatBytes(ckpt.total_bytes)}</td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(ckpt.created_at)}</td>
+        <td className="table-cell text-text-tertiary font-mono text-xs">{ckpt.run_id.slice(0, 12)}</td>
+        <td className="table-cell text-text-secondary font-mono">{ckpt.step.toLocaleString()}</td>
+        <td className="table-cell"><CkptBadge state={ckpt.state} /></td>
+        <td className="table-cell text-text-secondary">{ckpt.num_shards}</td>
+        <td className="table-cell text-text-secondary">{formatBytes(ckpt.total_bytes)}</td>
+        <td className="table-cell text-text-tertiary text-xs">{formatDate(ckpt.created_at)}</td>
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={7} className="px-6 py-4 bg-gray-950">
+          <td colSpan={7} className="px-4 py-4 bg-surface-0">
             <div className="pl-5">
-              <h4 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+              <h4 className="text-2xs font-semibold text-text-tertiary uppercase tracking-wider mb-2.5">
                 Shard Details ({ckpt.shard_ids.length} shards)
               </h4>
               {ckpt.shard_ids.length === 0 ? (
-                <p className="text-sm text-gray-600">No shard data available.</p>
+                <p className="text-sm text-text-tertiary">No shard data available.</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {ckpt.shard_ids.map((shardId, idx) => (
                     <div
                       key={shardId}
-                      className="bg-gray-900 border border-gray-800 rounded px-3 py-2 flex items-center justify-between"
+                      className="bg-surface-2 border border-border rounded-lg px-3 py-2 flex items-center justify-between"
                     >
                       <div>
-                        <p className="text-xs font-mono text-gray-300">{shardId.length > 20 ? shardId.slice(0, 20) + '\u2026' : shardId}</p>
-                        <p className="text-xs text-gray-500">Shard {idx}</p>
+                        <p className="text-xs font-mono text-text-secondary">{shortId(shardId, 20)}</p>
+                        <p className="text-2xs text-text-tertiary">Shard {idx}</p>
                       </div>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-2xs text-text-tertiary">
                         ~{formatBytes(ckpt.total_bytes / Math.max(ckpt.num_shards, 1))}
                       </span>
                     </div>
@@ -102,7 +72,6 @@ function CheckpointBrowser() {
 
   const fetchAll = useCallback(async () => {
     try {
-      // First get all runs, then fetch checkpoints for each
       const runsRes = await fetch(`${API_BASE}/api/runs`);
       if (!runsRes.ok) throw new Error(`Runs: ${runsRes.status}`);
       const runs: RunStatus[] = await runsRes.json();
@@ -112,13 +81,10 @@ function CheckpointBrowser() {
           const res = await fetch(`${API_BASE}/api/runs/${r.run_id}/checkpoints`);
           if (!res.ok) return [];
           return (await res.json()) as CheckpointInfo[];
-        } catch {
-          return [];
-        }
+        } catch { return []; }
       });
 
       const allCkpts = (await Promise.all(ckptPromises)).flat();
-      // Sort by created_at descending
       allCkpts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setCheckpoints(allCkpts);
       setError(null);
@@ -135,77 +101,47 @@ function CheckpointBrowser() {
     return () => clearInterval(id);
   }, [fetchAll]);
 
-  // Summary stats
   const totalBytes = checkpoints.reduce((s, c) => s + c.total_bytes, 0);
   const committedCount = checkpoints.filter((c) => c.state === 'COMMITTED').length;
   const totalShards = checkpoints.reduce((s, c) => s + c.num_shards, 0);
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-100">Checkpoint Browser</h2>
-        <p className="mt-1 text-sm text-gray-400">
-          Browse and inspect checkpoints across all training runs. Click a row to expand shard details.
-        </p>
+      <SectionHeader
+        title="Checkpoint Browser"
+        subtitle="Browse and inspect checkpoints across all training runs."
+      />
+
+      {error && <ErrorBanner message={error} />}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+        <MetricCard label="Total Checkpoints" value={checkpoints.length} />
+        <MetricCard label="Committed" value={committedCount} valueColor="text-state-running" />
+        <MetricCard label="Total Shards" value={totalShards} />
+        <MetricCard label="Total Storage" value={formatBytes(totalBytes)} />
       </div>
 
-      {error && (
-        <div className="mb-4 text-sm text-red-400 bg-red-900/30 border border-red-800 rounded-lg px-4 py-3">
-          {error}
-        </div>
-      )}
+      {loading && <Loading text="Loading checkpoints..." />}
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-          <p className="text-sm text-gray-400">Total Checkpoints</p>
-          <p className="text-2xl font-bold text-gray-100 mt-1">{checkpoints.length}</p>
-        </div>
-        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-          <p className="text-sm text-gray-400">Committed</p>
-          <p className="text-2xl font-bold text-green-400 mt-1">{committedCount}</p>
-        </div>
-        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-          <p className="text-sm text-gray-400">Total Shards</p>
-          <p className="text-2xl font-bold text-gray-100 mt-1">{totalShards}</p>
-        </div>
-        <div className="bg-gray-900 rounded-lg border border-gray-800 p-4">
-          <p className="text-sm text-gray-400">Total Storage</p>
-          <p className="text-2xl font-bold text-gray-100 mt-1">{formatBytes(totalBytes)}</p>
-        </div>
-      </div>
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center justify-center py-20 text-gray-500 text-sm">
-          Loading checkpoints...
-        </div>
-      )}
-
-      {/* Empty */}
       {!loading && checkpoints.length === 0 && !error && (
-        <div className="flex items-center justify-center py-20 text-gray-500 text-sm">
-          No checkpoints found across any run.
-        </div>
+        <EmptyState message="No checkpoints found across any run." />
       )}
 
-      {/* Table */}
       {!loading && checkpoints.length > 0 && (
-        <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-800">
-            <thead className="bg-gray-800/50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Checkpoint ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Run</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Step</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">State</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Shards</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Size</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Created</th>
+        <div className="card overflow-hidden">
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="table-header">Checkpoint ID</th>
+                <th className="table-header">Run</th>
+                <th className="table-header">Step</th>
+                <th className="table-header">State</th>
+                <th className="table-header">Shards</th>
+                <th className="table-header">Size</th>
+                <th className="table-header">Created</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800">
+            <tbody className="divide-y divide-border-subtle">
               {checkpoints.map((ckpt) => (
                 <CheckpointRow key={ckpt.checkpoint_id} ckpt={ckpt} />
               ))}

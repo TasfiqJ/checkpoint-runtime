@@ -1,11 +1,11 @@
 export default function HowItWorksPage() {
   return (
-    <div className="max-w-3xl mx-auto space-y-10 py-4">
+    <div className="max-w-3xl mx-auto space-y-12 py-4">
       <header>
-        <h1 className="text-3xl font-bold text-gray-100 tracking-tight">
+        <h1 className="text-3xl font-bold text-text-primary tracking-tight">
           How It Works
         </h1>
-        <p className="text-sm text-gray-400 mt-2">
+        <p className="text-sm text-text-secondary mt-2 leading-relaxed">
           A detailed walkthrough of every backend component, what it does, and why it exists.
         </p>
       </header>
@@ -309,16 +309,16 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
           for example. Here are all the states:
         </P>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="card overflow-hidden">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400">
-                <th className="px-4 py-2 text-left font-medium">State</th>
-                <th className="px-4 py-2 text-left font-medium">Meaning</th>
-                <th className="px-4 py-2 text-left font-medium">Next States</th>
+              <tr className="border-b border-border">
+                <th className="table-header">State</th>
+                <th className="table-header">Meaning</th>
+                <th className="table-header">Next States</th>
               </tr>
             </thead>
-            <tbody className="text-gray-300">
+            <tbody className="text-text-secondary">
               {[
                 ['CREATED', 'Run registered, not started yet', 'RUNNING, CANCELLED'],
                 ['RUNNING', 'Training is actively happening', 'CHECKPOINTING, FAILED, COMPLETED, CANCELLED'],
@@ -329,10 +329,10 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
                 ['COMPLETED', 'Training finished all steps (terminal)', 'none'],
                 ['CANCELLED', 'Manually stopped (terminal)', 'none'],
               ].map(([state, meaning, next]) => (
-                <tr key={state} className="border-b border-gray-800/50">
-                  <td className="px-4 py-2 font-mono text-indigo-400">{state}</td>
-                  <td className="px-4 py-2">{meaning}</td>
-                  <td className="px-4 py-2 font-mono text-gray-500">{next}</td>
+                <tr key={state} className="border-b border-border-subtle">
+                  <td className="table-cell font-mono text-accent">{state}</td>
+                  <td className="table-cell">{meaning}</td>
+                  <td className="table-cell font-mono text-text-tertiary">{next}</td>
                 </tr>
               ))}
             </tbody>
@@ -465,16 +465,16 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
         <P>
           Everything runs in Docker Compose. Here's every single container:
         </P>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="card overflow-hidden">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400">
-                <th className="px-4 py-2 text-left font-medium">Container</th>
-                <th className="px-4 py-2 text-left font-medium">Port</th>
-                <th className="px-4 py-2 text-left font-medium">What It Does</th>
+              <tr className="border-b border-border">
+                <th className="table-header">Container</th>
+                <th className="table-header">Port</th>
+                <th className="table-header">What It Does</th>
               </tr>
             </thead>
-            <tbody className="text-gray-300">
+            <tbody className="text-text-secondary">
               {[
                 ['ckpt-etcd', '2379', 'Coordination store for leases, run state, metadata'],
                 ['ckpt-minio', '9000', 'S3-compatible object storage for checkpoint files'],
@@ -488,10 +488,10 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
                 ['ckpt-grafana', '3001', 'Dashboard UI for metrics visualization'],
                 ['ckpt-jaeger', '16686', 'Distributed tracing UI'],
               ].map(([name, port, desc]) => (
-                <tr key={name} className="border-b border-gray-800/50">
-                  <td className="px-4 py-2 font-mono text-indigo-400">{name}</td>
-                  <td className="px-4 py-2 font-mono text-gray-500">{port}</td>
-                  <td className="px-4 py-2">{desc}</td>
+                <tr key={name} className="border-b border-border-subtle">
+                  <td className="table-cell font-mono text-accent">{name}</td>
+                  <td className="table-cell font-mono text-text-tertiary">{port}</td>
+                  <td className="table-cell">{desc}</td>
                 </tr>
               ))}
             </tbody>
@@ -501,13 +501,13 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
 
       {/* ── TECH DECISIONS ────────────────────────────────────────── */}
       <Section title="Why These Technology Choices">
-        <div className="space-y-4">
+        <div className="grid gap-3">
           <TechChoice
             tech="Rust for the Data Plane"
             reason="Checkpoint data can be gigabytes. Rust has zero-cost abstractions, no garbage collector pauses, and async I/O via Tokio. A Python data plane would add seconds of GC latency during large uploads."
           />
           <TechChoice
-            tech="gRPC for Control↔Data communication"
+            tech="gRPC for Control-Data communication"
             reason="gRPC supports streaming — the control plane can send checkpoint bytes as a stream of chunks instead of buffering the entire thing in memory. It also generates type-safe client/server code from .proto files."
           />
           <TechChoice
@@ -530,7 +530,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
       </Section>
 
       <footer className="text-center pb-8 pt-4">
-        <p className="text-xs text-gray-600">
+        <p className="text-xs text-text-tertiary">
           Built with Rust, Python, React, gRPC, etcd, MinIO, Docker, Prometheus, Grafana, and Jaeger.
         </p>
       </footer>
@@ -543,7 +543,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-4">
-      <h2 className="text-xl font-bold text-gray-100 border-b border-gray-800 pb-2">{title}</h2>
+      <h2 className="text-lg font-semibold text-text-primary border-b border-border pb-3">{title}</h2>
       {children}
     </section>
   );
@@ -552,23 +552,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-gray-200">{title}</h3>
+      <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
       {children}
     </div>
   );
 }
 
 function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-gray-400 leading-relaxed">{children}</p>;
+  return <p className="text-sm text-text-secondary leading-relaxed">{children}</p>;
 }
 
 function Strong({ children }: { children: React.ReactNode }) {
-  return <strong className="text-gray-200 font-medium">{children}</strong>;
+  return <strong className="text-text-primary font-medium">{children}</strong>;
 }
 
 function Code({ children }: { children: React.ReactNode }) {
   return (
-    <code className="text-xs font-mono bg-gray-800 text-indigo-300 px-1.5 py-0.5 rounded">
+    <code className="text-xs font-mono bg-surface-3 text-accent-hover px-1.5 py-0.5 rounded">
       {children}
     </code>
   );
@@ -576,7 +576,7 @@ function Code({ children }: { children: React.ReactNode }) {
 
 function CodeBlock({ children }: { children: string }) {
   return (
-    <pre className="bg-black/40 border border-gray-800 rounded-lg p-3 text-[11px] font-mono text-gray-300 overflow-x-auto leading-relaxed">
+    <pre className="bg-surface-0 border border-border rounded-lg p-3.5 text-[11px] font-mono text-text-secondary overflow-x-auto leading-relaxed">
       {children}
     </pre>
   );
@@ -586,8 +586,8 @@ function BulletList({ items }: { items: string[] }) {
   return (
     <ul className="space-y-1.5 ml-4">
       {items.map((item, i) => (
-        <li key={i} className="text-sm text-gray-400 leading-relaxed flex gap-2">
-          <span className="text-gray-600 mt-1.5 flex-shrink-0">&#8226;</span>
+        <li key={i} className="text-sm text-text-secondary leading-relaxed flex gap-2">
+          <span className="text-text-tertiary mt-1.5 flex-shrink-0 text-[8px]">&#9679;</span>
           <span>{item}</span>
         </li>
       ))}
@@ -597,12 +597,12 @@ function BulletList({ items }: { items: string[] }) {
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-2 pl-4 border-l-2 border-indigo-800/50">
-      <div className="flex items-center gap-2">
-        <span className="w-6 h-6 rounded-full bg-indigo-900/50 text-indigo-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
+    <div className="space-y-2.5 pl-4 border-l-2 border-accent/20">
+      <div className="flex items-center gap-2.5">
+        <span className="w-6 h-6 rounded-md bg-accent-muted text-accent text-xs font-semibold flex items-center justify-center flex-shrink-0">
           {n}
         </span>
-        <h3 className="text-sm font-semibold text-gray-200">{title}</h3>
+        <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
       </div>
       {children}
     </div>
@@ -611,9 +611,9 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 function TechChoice({ tech, reason }: { tech: string; reason: string }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-      <h4 className="text-xs font-semibold text-indigo-400 mb-1">{tech}</h4>
-      <p className="text-xs text-gray-400 leading-relaxed">{reason}</p>
+    <div className="card p-4">
+      <h4 className="text-xs font-semibold text-accent mb-1.5">{tech}</h4>
+      <p className="text-xs text-text-secondary leading-relaxed">{reason}</p>
     </div>
   );
 }

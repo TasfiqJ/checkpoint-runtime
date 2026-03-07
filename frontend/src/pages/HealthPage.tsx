@@ -1,52 +1,34 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { HealthStatus, HealthLevel, WorkerInfo } from '../types';
 import { API_BASE } from '../config/api';
+import { WORKER_DOT, formatUptime, formatTime } from '../design';
+import { SectionHeader, ErrorBanner, Loading } from '../components/ui';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Config ───────────────────────────────────────────────────────────────────
 
-const HEALTH_CONFIG: Record<HealthLevel, { label: string; dot: string; banner: string }> = {
-  HEALTHY:   { label: 'All Systems Operational',       dot: 'bg-green-500',  banner: 'border-green-800 bg-green-900/20' },
-  DEGRADED:  { label: 'Degraded Performance',          dot: 'bg-yellow-500', banner: 'border-yellow-800 bg-yellow-900/20' },
-  UNHEALTHY: { label: 'System Unhealthy',              dot: 'bg-red-500',    banner: 'border-red-800 bg-red-900/20' },
+const HEALTH_CONFIG: Record<HealthLevel, { label: string; dot: string; border: string }> = {
+  HEALTHY:   { label: 'All Systems Operational', dot: 'bg-state-running',    border: 'border-l-state-running' },
+  DEGRADED:  { label: 'Degraded Performance',    dot: 'bg-state-checkpoint', border: 'border-l-state-checkpoint' },
+  UNHEALTHY: { label: 'System Unhealthy',        dot: 'bg-state-failed',     border: 'border-l-state-failed' },
 };
 
 function lagColor(lag: number): string {
-  if (lag < 5)  return 'text-green-400';
-  if (lag < 30) return 'text-yellow-400';
-  return 'text-red-400';
+  if (lag < 5) return 'text-state-running';
+  if (lag < 30) return 'text-state-checkpoint';
+  return 'text-state-failed';
 }
 
-function lagBorder(lag: number): string {
-  if (lag < 5)  return 'border-green-800/50';
-  if (lag < 30) return 'border-yellow-800/50';
-  return 'border-red-800/50';
+function lagBarColor(lag: number): string {
+  if (lag < 5) return 'bg-state-running';
+  if (lag < 30) return 'bg-state-checkpoint';
+  return 'bg-state-failed';
 }
-
-function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  } catch {
-    return iso;
-  }
-}
-
-// ── Lag indicator bar ────────────────────────────────────────────────────────
 
 function LagIndicator({ lag }: { lag: number }) {
   const pct = Math.min(100, (lag / 60) * 100);
-  const color = lag < 5 ? 'bg-green-500' : lag < 30 ? 'bg-yellow-500' : 'bg-red-500';
   return (
-    <div className="h-1.5 w-24 bg-gray-800 rounded-full overflow-hidden">
-      <div className={`h-1.5 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+    <div className="h-1 w-20 bg-surface-3 rounded-full overflow-hidden">
+      <div className={`h-1 rounded-full ${lagBarColor(lag)} transition-all`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -67,7 +49,6 @@ function HealthPage() {
         fetch(`${API_BASE}/api/workers`),
         fetch(`${API_BASE}/api/metrics/heartbeat-lags`),
       ]);
-
       if (!healthRes.ok) throw new Error(`Health: ${healthRes.status}`);
       if (!workersRes.ok) throw new Error(`Workers: ${workersRes.status}`);
       if (!lagsRes.ok) throw new Error(`Lags: ${lagsRes.status}`);
@@ -90,117 +71,103 @@ function HealthPage() {
     return () => clearInterval(id);
   }, [fetchAll]);
 
-  // ── Render ─────────────────────────────────────────────────────────────
-
-  if (loading) {
-    return <div className="flex items-center justify-center py-20 text-gray-500 text-sm">Loading health data...</div>;
-  }
+  if (loading) return <Loading text="Loading health data..." />;
 
   const cfg = health ? HEALTH_CONFIG[health.status] : HEALTH_CONFIG.HEALTHY;
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-100">System Health</h2>
-        <p className="mt-1 text-sm text-gray-400">
-          Monitor workers, heartbeat status, and system health indicators.
-        </p>
-      </div>
+      <SectionHeader
+        title="System Health"
+        subtitle="Monitor workers, heartbeat status, and system health indicators."
+      />
 
-      {error && (
-        <div className="mb-4 text-sm text-red-400 bg-red-900/30 border border-red-800 rounded-lg px-4 py-3">
-          {error}
-        </div>
-      )}
+      {error && <ErrorBanner message={error} />}
 
       {/* Overall status banner */}
       {health && (
-        <div className={`rounded-lg border p-6 mb-8 ${cfg.banner}`}>
-          <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${cfg.dot}`} />
-            <h3 className="text-lg font-semibold text-gray-100">{cfg.label}</h3>
-          </div>
-          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div>
-              <span className="text-gray-400">Version</span>
-              <p className="text-gray-200 font-mono">{health.version}</p>
+        <div className={`card overflow-hidden mb-6 border-l-2 ${cfg.border}`}>
+          <div className="p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+              <h3 className="text-base font-semibold text-text-primary">{cfg.label}</h3>
             </div>
-            <div>
-              <span className="text-gray-400">Uptime</span>
-              <p className="text-gray-200">{formatUptime(health.uptime_seconds)}</p>
-            </div>
-            <div>
-              <span className="text-gray-400">Active Runs</span>
-              <p className="text-gray-200">{health.active_runs}</p>
-            </div>
-            <div>
-              <span className="text-gray-400">etcd</span>
-              <p className={health.etcd_connected ? 'text-green-400' : 'text-red-400'}>
-                {health.etcd_connected ? 'Connected' : 'Disconnected'}
-              </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <span className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">Version</span>
+                <p className="text-sm text-text-primary font-mono mt-0.5">{health.version}</p>
+              </div>
+              <div>
+                <span className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">Uptime</span>
+                <p className="text-sm text-text-primary mt-0.5">{formatUptime(health.uptime_seconds)}</p>
+              </div>
+              <div>
+                <span className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">Active Runs</span>
+                <p className="text-sm text-text-primary mt-0.5">{health.active_runs}</p>
+              </div>
+              <div>
+                <span className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">etcd</span>
+                <p className={`text-sm mt-0.5 font-medium ${health.etcd_connected ? 'text-state-running' : 'text-state-failed'}`}>
+                  {health.etcd_connected ? 'Connected' : 'Disconnected'}
+                </p>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Worker cards */}
+      {/* Worker section */}
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-100">Workers ({workers.length})</h3>
+        <h3 className="text-sm font-semibold text-text-primary">Workers ({workers.length})</h3>
       </div>
 
       {workers.length === 0 && (
-        <div className="text-center py-12 text-sm text-gray-500">No workers registered.</div>
+        <div className="text-center py-12 text-sm text-text-tertiary">No workers registered.</div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {workers.map((w) => {
           const lag = lags[w.worker_id] ?? 0;
+          const isActive = w.status === 'ACTIVE' || w.status === 'active';
           return (
-            <div
-              key={w.worker_id}
-              className={`bg-gray-900 rounded-lg border p-4 ${lagBorder(lag)}`}
-            >
-              {/* Header row */}
+            <div key={w.worker_id} className="card p-4">
+              {/* Header */}
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="text-sm font-semibold text-gray-100">Worker {w.rank}</p>
-                  <p className="text-xs font-mono text-gray-500">
+                  <p className="text-sm font-semibold text-text-primary">Worker {w.rank}</p>
+                  <p className="text-2xs font-mono text-text-tertiary mt-0.5">
                     {w.worker_id.length > 16 ? w.worker_id.slice(0, 16) + '\u2026' : w.worker_id}
                   </p>
                 </div>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                  w.status === 'ACTIVE' || w.status === 'active'
-                    ? 'bg-green-900/50 text-green-400'
-                    : w.status === 'IDLE' || w.status === 'idle'
-                    ? 'bg-gray-700/50 text-gray-400'
-                    : 'bg-red-900/50 text-red-400'
+                <span className={`badge ${
+                  isActive
+                    ? 'bg-state-running-muted text-state-running'
+                    : 'bg-state-failed-muted text-state-failed'
                 }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${WORKER_DOT[w.status] ?? 'bg-state-neutral'}`} />
                   {w.status}
                 </span>
               </div>
 
-              {/* Stats grid */}
+              {/* Stats */}
               <div className="grid grid-cols-3 gap-3 text-xs">
                 <div>
-                  <span className="text-gray-500">Step</span>
-                  <p className="text-gray-200 font-mono">{w.current_step.toLocaleString()}</p>
+                  <span className="text-2xs text-text-tertiary">Step</span>
+                  <p className="text-text-primary font-mono mt-0.5">{w.current_step.toLocaleString()}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Heartbeat</span>
-                  <p className="text-gray-200">{formatTime(w.last_heartbeat)}</p>
+                  <span className="text-2xs text-text-tertiary">Heartbeat</span>
+                  <p className="text-text-primary mt-0.5">{formatTime(w.last_heartbeat)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Lag</span>
-                  <p className={`font-medium ${lagColor(lag)}`}>
-                    {lag.toFixed(1)}s
-                  </p>
+                  <span className="text-2xs text-text-tertiary">Lag</span>
+                  <p className={`font-medium mt-0.5 ${lagColor(lag)}`}>{lag.toFixed(1)}s</p>
                 </div>
               </div>
 
-              {/* Heartbeat lag indicator */}
+              {/* Lag bar */}
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-xs text-gray-500">Heartbeat lag</span>
+                <span className="text-2xs text-text-tertiary">Heartbeat lag</span>
                 <LagIndicator lag={lag} />
               </div>
             </div>
