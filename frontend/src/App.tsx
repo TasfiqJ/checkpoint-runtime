@@ -103,7 +103,7 @@ function App() {
           initial={false}
           animate={menuOpen ? 'open' : 'closed'}
           onClick={() => setMenuOpen((v) => !v)}
-          className={`group fixed right-4 top-4 z-50 h-20 w-20 transition-all ${
+          className={`group fixed right-4 top-4 z-50 h-16 w-16 transition-all ${
             menuOpen ? 'rounded-bl-xl rounded-tr-xl' : 'rounded-xl'
           }`}
         >
