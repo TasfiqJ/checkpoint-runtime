@@ -95,7 +95,7 @@ function App() {
           animate={menuOpen ? 'open' : 'closed'}
           variants={UNDERLAY_VARIANTS}
           style={{ top: 16, right: 16 }}
-          className="fixed z-40 rounded-xl bg-surface-1 border border-line shadow-glow"
+          className="fixed z-40 rounded-xl bg-surface-1/60 backdrop-blur-xl border border-line/50 shadow-glow"
         />
 
         {/* Hamburger button */}
@@ -103,7 +103,7 @@ function App() {
           initial={false}
           animate={menuOpen ? 'open' : 'closed'}
           onClick={() => setMenuOpen((v) => !v)}
-          className={`group fixed right-4 top-4 z-50 h-14 w-14 bg-white/0 transition-all hover:bg-surface-3/40 ${
+          className={`group fixed right-4 top-4 z-50 h-20 w-20 transition-all ${
             menuOpen ? 'rounded-bl-xl rounded-tr-xl' : 'rounded-xl'
           }`}
         >
@@ -129,8 +129,8 @@ function App() {
           {menuOpen && (
             <motion.nav
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { delay: 0.1, duration: 0.2 } }}
-              exit={{ opacity: 0, transition: { duration: 0.15 } }}
+              animate={{ opacity: 1, transition: { delay: 0.3, duration: 0.3 } }}
+              exit={{ opacity: 0, transition: { delay: 0.1, duration: 0.2 } }}
               className="fixed right-4 top-4 z-40 h-[calc(100vh_-_32px)] w-[calc(100%_-_32px)] overflow-hidden flex flex-col"
             >
               {/* Links */}
@@ -143,8 +143,8 @@ function App() {
                       opacity: 1,
                       y: 0,
                       transition: {
-                        delay: 0.15 + idx * 0.05,
-                        duration: 0.3,
+                        delay: 0.75 + idx * 0.125,
+                        duration: 0.5,
                         ease: 'easeInOut',
                       },
                     }}
@@ -171,7 +171,7 @@ function App() {
                 animate={{
                   opacity: 1,
                   y: 0,
-                  transition: { delay: 0.4, duration: 0.3, ease: 'easeInOut' },
+                  transition: { delay: 1.125, duration: 0.5, ease: 'easeInOut' },
                 }}
                 exit={{ opacity: 0, y: 8 }}
                 className="px-10 pb-8 flex items-center justify-between"
@@ -209,17 +209,17 @@ const UNDERLAY_VARIANTS = {
   open: {
     width: 'calc(100% - 32px)',
     height: 'calc(100vh - 32px)',
-    transition: { type: 'spring' as const, mass: 2, stiffness: 500, damping: 40 },
+    transition: { type: 'spring' as const, mass: 3, stiffness: 400, damping: 50 },
   },
   closed: {
-    width: '56px',
-    height: '56px',
+    width: '80px',
+    height: '80px',
     transition: {
-      delay: 0.25,
+      delay: 0.75,
       type: 'spring' as const,
-      mass: 2,
-      stiffness: 500,
-      damping: 40,
+      mass: 3,
+      stiffness: 400,
+      damping: 50,
     },
   },
 };
