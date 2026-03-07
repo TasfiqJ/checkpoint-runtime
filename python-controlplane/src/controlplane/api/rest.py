@@ -96,6 +96,75 @@ _HEARTBEAT_LAGS: dict[str, float] = {}
 _APP_START_TIME: float = time.monotonic()
 _CHECKPOINT_SHARDS: dict[str, list[GrpcShardInfo]] = {}  # checkpoint_id -> shard infos
 
+# ---------------------------------------------------------------------------
+# Visitor tracking + activity feed (live demo social features)
+# ---------------------------------------------------------------------------
+
+_VISITORS: dict[str, dict] = {}  # session_id -> {country, country_code, flag, last_seen, ip}
+_ACTIVITY_FEED: list[dict] = []  # [{message, flag, timestamp}] max 50
+_IP_COUNTRY_CACHE: dict[str, dict] = {}  # ip -> {country, country_code, flag}
+
+
+def _ip_to_flag(country_code: str) -> str:
+    """Convert 2-letter country code to flag emoji."""
+    if not country_code or len(country_code) != 2:
+        return "\U0001F310"  # 🌐 globe
+    return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in country_code.upper())
+
+
+async def _lookup_country(ip: str) -> dict:
+    """Look up country from IP using ip-api.com (free, no key needed)."""
+    if ip in _IP_COUNTRY_CACHE:
+        return _IP_COUNTRY_CACHE[ip]
+
+    # Skip private/local IPs
+    if ip.startswith(("127.", "10.", "172.", "192.168.", "::1", "0.0.0.0")):
+        result = {"country": "Local", "country_code": "", "flag": "\U0001F4BB"}  # 💻
+        _IP_COUNTRY_CACHE[ip] = result
+        return result
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(
+                f"http://ip-api.com/json/{ip}?fields=country,countryCode",
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                code = data.get("countryCode", "")
+                result = {
+                    "country": data.get("country", "Unknown"),
+                    "country_code": code,
+                    "flag": _ip_to_flag(code),
+                }
+                _IP_COUNTRY_CACHE[ip] = result
+                return result
+    except Exception:
+        pass
+
+    result = {"country": "Unknown", "country_code": "", "flag": "\U0001F310"}
+    _IP_COUNTRY_CACHE[ip] = result
+    return result
+
+
+def _add_activity(message: str, flag: str = "\U0001F310"):
+    """Add an event to the activity feed (max 50 items)."""
+    _ACTIVITY_FEED.insert(0, {
+        "message": message,
+        "flag": flag,
+        "timestamp": time.time(),
+    })
+    if len(_ACTIVITY_FEED) > 50:
+        _ACTIVITY_FEED.pop()
+
+
+def _clean_stale_visitors():
+    """Remove visitors who haven't pinged in 45 seconds."""
+    now = time.time()
+    stale = [sid for sid, v in _VISITORS.items() if now - v["last_seen"] > 45]
+    for sid in stale:
+        del _VISITORS[sid]
+
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -1071,7 +1140,7 @@ def _register_routes(application: FastAPI) -> None:
             raise HTTPException(status_code=404, detail=f"Manifest not found: {exc}")
 
     @application.post("/api/demo/kill-worker/{container_name}", tags=["demo"])
-    async def demo_kill_worker(container_name: str) -> dict:
+    async def demo_kill_worker(container_name: str, request: Request) -> dict:
         """Kill a Docker container by name (for live demo)."""
         import subprocess
 
@@ -1090,6 +1159,18 @@ def _register_routes(application: FastAPI) -> None:
             )
             if kill_result.returncode != 0:
                 return {"killed": container_name, "success": False, "output": kill_result.stderr.strip()}
+
+            # Record kill in activity feed with visitor's country
+            forwarded = request.headers.get("x-forwarded-for", "")
+            client_ip = forwarded.split(",")[0].strip() if forwarded else (
+                request.client.host if request.client else "0.0.0.0"
+            )
+            geo = await _lookup_country(client_ip)
+            worker_label = container_name.replace("ckpt-", "")
+            _add_activity(
+                f"Someone from {geo['country']} just killed {worker_label}!",
+                geo["flag"],
+            )
 
             # Auto-restart the container after a brief delay so
             # the worker can recover from the latest checkpoint.
@@ -1117,6 +1198,83 @@ def _register_routes(application: FastAPI) -> None:
             )
         except subprocess.TimeoutExpired:
             raise HTTPException(status_code=504, detail="Docker kill timed out")
+
+    # -- visitor tracking + activity feed ------------------------------------
+
+    @application.post("/api/demo/visitors/ping", tags=["demo"])
+    async def demo_visitor_ping(request: Request) -> dict:
+        """Register/update a visitor and return live stats."""
+        import json as _json
+
+        # Get client IP
+        forwarded = request.headers.get("x-forwarded-for", "")
+        client_ip = forwarded.split(",")[0].strip() if forwarded else (
+            request.client.host if request.client else "0.0.0.0"
+        )
+
+        # Get or create session ID from request body
+        try:
+            body = await request.json()
+            session_id = body.get("session_id", "")
+        except Exception:
+            session_id = ""
+
+        if not session_id:
+            import uuid
+            session_id = str(uuid.uuid4())
+
+        # Look up country
+        geo = await _lookup_country(client_ip)
+
+        # Update visitor
+        is_new = session_id not in _VISITORS
+        _VISITORS[session_id] = {
+            "country": geo["country"],
+            "country_code": geo["country_code"],
+            "flag": geo["flag"],
+            "last_seen": time.time(),
+            "ip": client_ip,
+        }
+
+        # Add "joined" activity for new visitors
+        if is_new:
+            _add_activity(
+                f"Someone from {geo['country']} is watching the demo",
+                geo["flag"],
+            )
+
+        # Clean stale visitors
+        _clean_stale_visitors()
+
+        # Build response
+        country_counts: dict[str, dict] = {}
+        for v in _VISITORS.values():
+            cc = v["country_code"] or "XX"
+            if cc not in country_counts:
+                country_counts[cc] = {
+                    "country": v["country"],
+                    "country_code": cc,
+                    "flag": v["flag"],
+                    "count": 0,
+                }
+            country_counts[cc]["count"] += 1
+
+        return {
+            "session_id": session_id,
+            "total_visitors": len(_VISITORS),
+            "countries": sorted(country_counts.values(), key=lambda x: -x["count"]),
+            "activity": _ACTIVITY_FEED[:20],
+        }
+
+    @application.get("/api/demo/activity", tags=["demo"])
+    async def demo_activity_feed() -> dict:
+        """Return recent activity feed."""
+        _clean_stale_visitors()
+        return {
+            "total_visitors": len(_VISITORS),
+            "activity": _ACTIVITY_FEED[:20],
+        }
+
 
 
 # ---------------------------------------------------------------------------

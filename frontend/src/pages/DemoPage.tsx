@@ -6,6 +6,8 @@ import LogStream from '../components/LogStream';
 import StorageBrowser from '../components/StorageBrowser';
 import SystemInfo from '../components/SystemInfo';
 import DemoWalkthrough from '../components/DemoWalkthrough';
+import VisitorStats from '../components/VisitorStats';
+import ActivityFeed from '../components/ActivityFeed';
 
 // ── State colours ───────────────────────────────────────────────────────────
 
@@ -408,6 +410,8 @@ export default function DemoPage() {
 
           {/* ─── Right Column: Proof Panels ─── */}
           <div className="w-[380px] flex-shrink-0 space-y-3">
+            <VisitorStats />
+            <ActivityFeed />
             <SystemInfo />
             <ContainerStatus />
             <LogStream active={!!runId} />
@@ -452,6 +456,10 @@ export default function DemoPage() {
             <p className="text-xs text-gray-500 mb-4">
               These panels show live infrastructure data — not a simulation
             </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left mb-3">
+              <VisitorStats />
+              <ActivityFeed />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left mb-3">
               <SystemInfo />
               <ContainerStatus />

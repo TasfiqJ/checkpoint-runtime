@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import ArchitectureDiagram from '../components/ArchitectureDiagram';
+import VisitorStats from '../components/VisitorStats';
 
 const TECH_STACK = [
   { label: 'Rust', color: 'bg-orange-900/50 text-orange-300 border-orange-800' },
@@ -128,6 +129,11 @@ export default function LandingPage() {
             </span>
           ))}
         </div>
+      </section>
+
+      {/* ── Live Visitors ────────────────────────────────────────── */}
+      <section className="max-w-sm mx-auto">
+        <VisitorStats />
       </section>
 
       {/* ── Footer CTA ───────────────────────────────────────────── */}
