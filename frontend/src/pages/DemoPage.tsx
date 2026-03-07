@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import type { RunStatus, RunState, WorkerInfo, CheckpointInfo } from '../types';
 import { API_BASE } from '../config/api';
 import ContainerStatus from '../components/ContainerStatus';
@@ -239,13 +240,13 @@ export default function DemoPage() {
           <h1 className="text-4xl sm:text-5xl font-extrabold text-txt-1 tracking-tight leading-tight">
             I built this so you can break it.
             <br />
-            <span className="gradient-text">Watch it recover on its own.</span>
+            <span className="font-serif italic">Watch it recover on its own.</span>
           </h1>
 
           <p className="text-txt-2 text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed">
             I set up two <span className="text-txt-1 font-medium">real servers</span> training an AI model right now
             on a cloud machine in Virginia. You'll crash one on purpose and see my system
-            detect the failure, restart the server, and recover — with zero data loss.
+            detect the failure, restart the server, and recover with zero data loss.
           </p>
 
           <button
@@ -263,7 +264,7 @@ export default function DemoPage() {
             What's going to happen
           </h2>
           <p className="text-base text-txt-3 text-center mb-8">
-            The demo has 3 stages — it takes about 30 seconds
+            The demo has 3 stages and takes about 30 seconds
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -276,7 +277,7 @@ export default function DemoPage() {
               </div>
               <p className="text-base text-txt-2 leading-relaxed">
                 Two servers begin training an AI model. You'll see the <span className="text-txt-1 font-medium">step counter climbing</span> and{' '}
-                <span className="text-txt-1 font-medium">checkpoints saving</span> automatically every 50 steps —
+                <span className="text-txt-1 font-medium">checkpoints saving</span> automatically every 50 steps,
                 like auto-save in a video game.
               </p>
             </div>
@@ -292,7 +293,7 @@ export default function DemoPage() {
                 You press a <span className="text-err font-medium">"Kill" button</span> to destroy one of the training servers.
                 This sends a real{' '}
                 <code className="text-xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">docker kill</code>{' '}
-                command — the container actually shuts down on the server.
+                command, and the container actually shuts down on the server.
               </p>
             </div>
 
@@ -306,7 +307,7 @@ export default function DemoPage() {
               <p className="text-base text-txt-2 leading-relaxed">
                 The system <span className="text-txt-1 font-medium">detects the crash</span>, restarts the server,{' '}
                 <span className="text-txt-1 font-medium">loads the last save point</span> from storage, and{' '}
-                <span className="text-ok font-medium">resumes training</span> — all automatically in ~5 seconds.
+                <span className="text-ok font-medium">resumes training</span>, all automatically in ~5 seconds.
               </p>
             </div>
           </div>
@@ -325,21 +326,21 @@ export default function DemoPage() {
               <span className="panel-tag mt-0.5">stdout</span>
               <div>
                 <p className="text-base font-medium text-txt-1">Live Logs</p>
-                <p className="text-sm text-txt-3">Real-time output from Docker containers — you'll see heartbeats, checkpoint saves, and failure detection</p>
+                <p className="text-sm text-txt-3">Real-time output from Docker containers. You'll see heartbeats, checkpoint saves, and failure detection</p>
               </div>
             </div>
             <div className="card px-4 py-3 flex items-start gap-3">
               <span className="panel-tag mt-0.5">S3</span>
               <div>
                 <p className="text-base font-medium text-txt-1">Storage Browser</p>
-                <p className="text-sm text-txt-3">Real MinIO files appearing as checkpoints are saved — with SHA-256 hashes proving data integrity</p>
+                <p className="text-sm text-txt-3">Real MinIO files appearing as checkpoints are saved, with SHA-256 hashes proving data integrity</p>
               </div>
             </div>
             <div className="card px-4 py-3 flex items-start gap-3">
               <span className="panel-tag mt-0.5">docker</span>
               <div>
                 <p className="text-base font-medium text-txt-1">Container Status</p>
-                <p className="text-sm text-txt-3">Live Docker container list — watch the killed container go down and come back up</p>
+                <p className="text-sm text-txt-3">Live Docker container list. Watch the killed container go down and come back up</p>
               </div>
             </div>
             <div className="card px-4 py-3 flex items-start gap-3">
@@ -361,6 +362,29 @@ export default function DemoPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <SystemInfo />
             <ContainerStatus />
+          </div>
+        </div>
+
+        {/* Dashboard links */}
+        <div className="border-t border-line pt-10">
+          <p className="text-xs font-semibold text-txt-3 uppercase tracking-widest mb-4 text-center">Operator Dashboard</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Link to="/runs" className="card px-4 py-3 text-center hover:shadow-glow-sm transition-shadow group">
+              <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Training Runs</p>
+              <p className="text-xs text-txt-3 mt-0.5">Run lifecycle + state</p>
+            </Link>
+            <Link to="/checkpoints" className="card px-4 py-3 text-center hover:shadow-glow-sm transition-shadow group">
+              <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Checkpoint Browser</p>
+              <p className="text-xs text-txt-3 mt-0.5">Shards + manifests</p>
+            </Link>
+            <Link to="/health" className="card px-4 py-3 text-center hover:shadow-glow-sm transition-shadow group">
+              <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">System Health</p>
+              <p className="text-xs text-txt-3 mt-0.5">Worker heartbeats</p>
+            </Link>
+            <Link to="/performance" className="card px-4 py-3 text-center hover:shadow-glow-sm transition-shadow group">
+              <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Performance Metrics</p>
+              <p className="text-xs text-txt-3 mt-0.5">Latency + throughput</p>
+            </Link>
           </div>
         </div>
       </div>
@@ -426,7 +450,7 @@ export default function DemoPage() {
                     <p className="text-ok text-base font-bold">Recovery Successful!</p>
                     <p className="text-txt-2 text-sm mt-1">
                       The crashed worker restarted, loaded the last checkpoint, and resumed training.
-                      No data was lost — this is what the system is designed to do.
+                      No data was lost. This is what the system is designed to do.
                     </p>
                   </div>
                 </div>
@@ -451,7 +475,7 @@ export default function DemoPage() {
                 <h3 className="text-base font-bold text-txt-1">Training Workers</h3>
                 <p className="text-xs text-txt-3 mt-1">
                   Each worker is a real Docker container running PyTorch.{' '}
-                  <span className="text-err font-medium">Click "Kill" to shut one down</span> — the system will detect the failure and recover.
+                  <span className="text-err font-medium">Click "Kill" to shut one down</span> and the system will detect the failure and recover.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -491,7 +515,7 @@ export default function DemoPage() {
                         {killing === container ? (
                           'Killing...'
                         ) : !isAlive ? (
-                          'Offline — Recovering...'
+                          'Offline, Recovering...'
                         ) : (
                           <>Kill This Server</>
                         )}
@@ -538,7 +562,7 @@ export default function DemoPage() {
                 <div className="mb-3">
                   <h3 className="text-base font-bold text-txt-1">Checkpoint History</h3>
                   <p className="text-xs text-txt-3 mt-0.5">
-                    Each row is a save point — the AI model's state backed up to S3 storage
+                    Each row is a save point, the AI model's state backed up to S3 storage
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -568,7 +592,7 @@ export default function DemoPage() {
             <div className="card px-4 py-3">
               <p className="text-xs font-semibold text-txt-1 mb-1">Proof Panels</p>
               <p className="text-2xs text-txt-3 leading-relaxed">
-                Everything below is live data from the real server — not animations or mock data.
+                Everything below is live data from the real server, not animations or mock data.
               </p>
             </div>
             <VisitorStats />

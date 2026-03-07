@@ -33,11 +33,11 @@ export default {
           2: 'rgb(var(--txt-2) / <alpha-value>)',
           3: 'rgb(var(--txt-3) / <alpha-value>)',
         },
-        // Vibrant accent gradient endpoints (static — same in both modes)
+        // Primary accent — forest green palette (static — same in both modes)
         brand: {
-          blue: '#6366f1',
-          violet: '#8b5cf6',
-          pink: '#ec4899',
+          blue: '#14532d',
+          violet: '#166534',
+          pink: '#ca8a04',
           cyan: '#22d3ee',
         },
         // Semantic states (static)
@@ -50,6 +50,7 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        serif: ['Playfair Display', 'Georgia', 'Times New Roman', 'serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'monospace'],
       },
       fontSize: {

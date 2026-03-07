@@ -11,19 +11,19 @@ export default function HowItWorksPage() {
       </header>
 
       {/* -- THE PROBLEM ------------------------------------------------- */}
-      <Section title="The Problem -- Why This Exists">
+      <Section title="The Problem: Why This Exists">
         <P>
           You're training a neural network across 2 machines. It takes 1,000 steps.
           At step 850, one machine crashes. The operating system killed it because it ran out of memory.
-          Or the network dropped. Or someone tripped over a power cable. Doesn't matter -- it's dead.
+          Or the network dropped. Or someone tripped over a power cable. Doesn't matter, it's dead.
         </P>
         <P>
           Without checkpointing, you start over from step 0. All 850 steps of work? Gone.
-          The model weights, the optimizer momentum, the learning rate schedule -- all of it was in RAM,
+          The model weights, the optimizer momentum, the learning rate schedule. All of it was in RAM,
           and RAM is empty after a crash.
         </P>
         <P>
-          Now imagine this at scale. OpenAI, Google, Meta -- they train models on <Strong>thousands</Strong> of
+          Now imagine this at scale. OpenAI, Google, Meta. They train models on <Strong>thousands</Strong> of
           GPUs for <Strong>weeks</Strong>. A single GPU failure every few hours is normal. Without checkpointing,
           large-scale training is literally impossible.
         </P>
@@ -35,7 +35,7 @@ export default function HowItWorksPage() {
       </Section>
 
       {/* -- THE ARCHITECTURE -------------------------------------------- */}
-      <Section title="The Architecture -- Two Planes">
+      <Section title="The Architecture: Two Planes">
         <P>
           The system is split into two halves. This is the same pattern used at companies like
           OpenAI and Anyscale for their training infrastructure.
@@ -43,7 +43,7 @@ export default function HowItWorksPage() {
 
         <SubSection title="Control Plane (Python / FastAPI)">
           <P>
-            The brain. It doesn't touch any training data. It only manages <Strong>state</Strong> -- who's alive,
+            The brain. It doesn't touch any training data. It only manages <Strong>state</Strong>: who's alive,
             who's dead, what step are we on, is a checkpoint in progress.
           </P>
           <BulletList items={[
@@ -57,14 +57,14 @@ export default function HowItWorksPage() {
 
         <SubSection title="Data Plane (Rust / Tokio / gRPC)">
           <P>
-            The muscle. It handles the actual bytes -- receiving checkpoint data over gRPC,
+            The muscle. It handles the actual bytes: receiving checkpoint data over gRPC,
             computing SHA-256 checksums, and writing to MinIO (S3-compatible object storage).
           </P>
           <BulletList items={[
-            'Written in Rust for speed -- no garbage collector pauses during large uploads',
+            'Written in Rust for speed. No garbage collector pauses during large uploads.',
             'Uses Tokio async runtime for concurrent I/O (multiple shards uploading at once)',
             'Exposes a gRPC server on port 50051 using the tonic framework',
-            'Implements backpressure -- if the upload queue is full, it tells the control plane to slow down',
+            'Implements backpressure: if the upload queue is full, it tells the control plane to slow down',
             'Retries failed S3 uploads with exponential backoff + jitter (random delay to prevent thundering herd)',
           ]} />
         </SubSection>
@@ -89,7 +89,7 @@ export default function HowItWorksPage() {
         <Step n={1} title="Worker serializes the model">
           <P>
             The PyTorch worker on rank 0 calls <Code>torch.save()</Code> to convert the model
-            weights and optimizer state into raw bytes. This is a <Code>state_dict</Code> -- a
+            weights and optimizer state into raw bytes. This is a <Code>state_dict</Code>, a
             Python dictionary where keys are layer names and values are tensors.
           </P>
           <CodeBlock>{`state = {
@@ -165,7 +165,7 @@ s3_client.put_object(bucket, storage_key, bytes).await?;
 // "run-xyz/ckpt-a1b2/rank-0.sha256" containing the full hash`}</CodeBlock>
           <P>
             The key contains the hash. This means if you upload the exact same bytes twice,
-            you get the exact same key -- so it's <Strong>deduplicated automatically</Strong>.
+            you get the exact same key, so it's <Strong>deduplicated automatically</Strong>.
             This is called content-addressed storage.
           </P>
         </Step>
@@ -196,7 +196,7 @@ s3_client.put_object(bucket, storage_key, bytes).await?;
           <P>
             The manifest is the <Strong>atomic commit point</Strong>. If the manifest file
             exists in MinIO, the checkpoint is complete. If it doesn't exist, the checkpoint
-            failed and the shard files are garbage. This is how databases work too -- write the data
+            failed and the shard files are garbage. This is how databases work too: write the data
             first, then write a commit record.
           </P>
           <P>
@@ -220,7 +220,7 @@ s3_client.put_object(bucket, storage_key, bytes).await?;
           <CodeBlock>{`subprocess.run(["docker", "kill", "ckpt-worker-0"])`}</CodeBlock>
           <P>
             This sends SIGKILL to the container. The process is dead instantly. No graceful shutdown,
-            no cleanup -- just like a real hardware failure.
+            no cleanup, just like a real hardware failure.
           </P>
         </Step>
 
@@ -236,7 +236,7 @@ s3_client.put_object(bucket, storage_key, bytes).await?;
           </P>
           <CodeBlock>{`RUNNING -> FAILED
 
-// Log: "Worker ckpt-worker-0 heartbeat timeout -- marking run as FAILED"`}</CodeBlock>
+// Log: "Worker ckpt-worker-0 heartbeat timeout, marking run as FAILED"`}</CodeBlock>
         </Step>
 
         <Step n={3} title="The container auto-restarts (3 seconds after kill)">
@@ -264,7 +264,7 @@ run_id = read_file("/shared/run_id")  # from previous run
 status = GET /api/runs/{run_id}
 
 if status.state in ("FAILED", "RECOVERING"):
-    # This is OUR old run -- resume it
+    # This is OUR old run, resume it
     POST /api/runs/{run_id}/resume`}</CodeBlock>
           <P>
             The control plane transitions: <Code>FAILED {'\u2192'} RECOVERING {'\u2192'} RUNNING</Code>
@@ -302,7 +302,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
       </Section>
 
       {/* -- THE STATE MACHINE ------------------------------------------- */}
-      <Section title="The State Machine -- 8 States">
+      <Section title="The State Machine: 8 States">
         <P>
           Every training run has a state. The control plane enforces that only valid transitions
           happen. You can't go from <Code>COMPLETED</Code> to <Code>RUNNING</Code>,
@@ -352,7 +352,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
       </Section>
 
       {/* -- COORDINATION WITH ETCD -------------------------------------- */}
-      <Section title="etcd -- The Coordination Layer">
+      <Section title="etcd: The Coordination Layer">
         <P>
           etcd is a distributed key-value store. Think of it as a shared dictionary that
           multiple services can read and write to, with strong consistency guarantees (if
@@ -362,20 +362,20 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
           This system uses etcd for three things:
         </P>
         <BulletList items={[
-          'Worker leases -- each worker holds a lease with a 10-second TTL. If the worker stops renewing it, the lease expires and the control plane knows the worker is dead.',
-          'Run state -- the current state (RUNNING, FAILED, etc.) and metadata (current step, run ID) are stored in etcd keys.',
-          'Checkpoint metadata -- which checkpoints exist, what step they\'re at, and whether they\'re committed.',
+          'Worker leases: each worker holds a lease with a 10-second TTL. If the worker stops renewing it, the lease expires and the control plane knows the worker is dead.',
+          'Run state: the current state (RUNNING, FAILED, etc.) and metadata (current step, run ID) are stored in etcd keys.',
+          'Checkpoint metadata: which checkpoints exist, what step they\'re at, and whether they\'re committed.',
         ]} />
         <P>
           Why etcd instead of a regular database? Because etcd has built-in lease TTLs.
           You create a lease, attach it to a key, and if the lease isn't renewed within the TTL,
           the key is automatically deleted. This is exactly what we need for heartbeat-based
-          failure detection -- no custom timer code needed.
+          failure detection, no custom timer code needed.
         </P>
       </Section>
 
       {/* -- STORAGE ----------------------------------------------------- */}
-      <Section title="MinIO -- The Storage Layer">
+      <Section title="MinIO: The Storage Layer">
         <P>
           MinIO is an open-source S3-compatible object store. It speaks the exact same API
           as Amazon S3, so the Rust data plane uses the AWS S3 SDK to talk to it. If you
@@ -388,8 +388,8 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
         <CodeBlock>{`checkpoints/
 └── run-abc123/
     ├── ckpt-001/
-    │   ├── sha256-a1b2c3d4e5f6-rank-0.bin   (2.4 MB -- model weights)
-    │   ├── rank-0.sha256                      (64 bytes -- checksum)
+    │   ├── sha256-a1b2c3d4e5f6-rank-0.bin   (2.4 MB, model weights)
+    │   ├── rank-0.sha256                      (64 bytes, checksum)
     │   └── _manifest.json                     (commit proof)
     └── ckpt-002/
         ├── sha256-f7g8h9i0j1k2-rank-0.bin   (2.4 MB)
@@ -404,7 +404,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
       </Section>
 
       {/* -- OBSERVABILITY ----------------------------------------------- */}
-      <Section title="Observability -- Metrics, Traces, Dashboards">
+      <Section title="Observability: Metrics, Traces, Dashboards">
         <P>
           The system exports telemetry data through OpenTelemetry, which feeds into three
           backends:
@@ -415,10 +415,10 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
             <Code>/api/metrics/prometheus</Code>:
           </P>
           <BulletList items={[
-            'controlplane_checkpoints_total -- how many checkpoints have been created',
-            'controlplane_checkpoint_duration_seconds -- how long each checkpoint save takes',
-            'controlplane_worker_heartbeat_lag_seconds -- how stale each worker\'s last heartbeat is',
-            'controlplane_active_workers -- how many workers are currently alive',
+            'controlplane_checkpoints_total: how many checkpoints have been created',
+            'controlplane_checkpoint_duration_seconds: how long each checkpoint save takes',
+            'controlplane_worker_heartbeat_lag_seconds: how stale each worker\'s last heartbeat is',
+            'controlplane_active_workers: how many workers are currently alive',
           ]} />
         </SubSection>
         <SubSection title="Grafana (Dashboards)">
@@ -439,7 +439,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
       </Section>
 
       {/* -- DDP --------------------------------------------------------- */}
-      <Section title="PyTorch DDP -- How the Workers Train">
+      <Section title="PyTorch DDP: How the Workers Train">
         <P>
           DDP stands for Distributed Data Parallel. It's PyTorch's built-in way to train
           one model across multiple machines. Each worker has a full copy of the model.
@@ -456,12 +456,12 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
           Only rank-0 (the first worker) saves checkpoints. The other workers don't need to
           save because in DDP with gloo, all workers have identical model weights after each
           all-reduce step. When recovering, non-rank-0 workers fall back to loading rank-0's
-          shard -- they'll get the same weights.
+          shard, and they'll get the same weights.
         </P>
       </Section>
 
       {/* -- DOCKER ------------------------------------------------------ */}
-      <Section title="The Docker Stack -- 11 Services">
+      <Section title="The Docker Stack: 11 Services">
         <P>
           Everything runs in Docker Compose. Here's every single container:
         </P>
@@ -478,12 +478,12 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
               {[
                 ['ckpt-etcd', '2379', 'Coordination store for leases, run state, metadata'],
                 ['ckpt-minio', '9000', 'S3-compatible object storage for checkpoint files'],
-                ['ckpt-dataplane', '50051', 'Rust gRPC server -- writes/reads shards to MinIO'],
-                ['ckpt-controlplane', '8000', 'Python REST API -- orchestrates everything'],
+                ['ckpt-dataplane', '50051', 'Rust gRPC server, writes/reads shards to MinIO'],
+                ['ckpt-controlplane', '8000', 'Python REST API, orchestrates everything'],
                 ['ckpt-worker-0', '--', 'PyTorch DDP worker rank 0 (saves checkpoints)'],
                 ['ckpt-worker-1', '--', 'PyTorch DDP worker rank 1 (trains in parallel)'],
                 ['ckpt-frontend', '3000', 'React dashboard and this page you\'re reading'],
-                ['ckpt-otel', '4317', 'OpenTelemetry Collector -- receives and routes telemetry'],
+                ['ckpt-otel', '4317', 'OpenTelemetry Collector, receives and routes telemetry'],
                 ['ckpt-prometheus', '9090', 'Time-series database for metrics'],
                 ['ckpt-grafana', '3001', 'Dashboard UI for metrics visualization'],
                 ['ckpt-jaeger', '16686', 'Distributed tracing UI'],
@@ -508,7 +508,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
           />
           <TechChoice
             tech="gRPC for Control-Data communication"
-            reason="gRPC supports streaming -- the control plane can send checkpoint bytes as a stream of chunks instead of buffering the entire thing in memory. It also generates type-safe client/server code from .proto files."
+            reason="gRPC supports streaming: the control plane can send checkpoint bytes as a stream of chunks instead of buffering the entire thing in memory. It also generates type-safe client/server code from .proto files."
           />
           <TechChoice
             tech="etcd for coordination"
@@ -524,7 +524,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
           />
           <TechChoice
             tech="Content-addressed storage keys"
-            reason="The filename includes the SHA-256 hash of the content. Upload the same bytes twice? Same filename -- automatic deduplication. Verify data integrity? Recompute the hash and compare."
+            reason="The filename includes the SHA-256 hash of the content. Upload the same bytes twice? Same filename, automatic deduplication. Verify data integrity? Recompute the hash and compare."
           />
         </div>
       </Section>

@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import ArchitectureDiagram from '../components/ArchitectureDiagram';
-import VisitorStats from '../components/VisitorStats';
 
 /** Firecrawl-style section counter: [ 01 / 09 ] · LABEL */
 function SectionCounter({ num, total, label }: { num: number; total: number; label: string }) {
@@ -23,8 +22,11 @@ const TOTAL = 9;
 const TECH_STACK = [
   { label: 'Rust', color: 'bg-recover/10 text-recover border-recover/20' },
   { label: 'Python', color: 'bg-info/10 text-info border-info/20' },
+  { label: 'TypeScript', color: 'bg-info/10 text-info border-info/20' },
+  { label: 'PyTorch', color: 'bg-err/10 text-err border-err/20' },
   { label: 'React', color: 'bg-brand-violet/10 text-brand-violet border-brand-violet/20' },
   { label: 'gRPC', color: 'bg-ok/10 text-ok border-ok/20' },
+  { label: 'FastAPI', color: 'bg-ok/10 text-ok border-ok/20' },
   { label: 'etcd', color: 'bg-brand-violet/10 text-brand-violet border-brand-violet/20' },
   { label: 'MinIO / S3', color: 'bg-warn/10 text-warn border-warn/20' },
   { label: 'Docker', color: 'bg-info/10 text-info border-info/20' },
@@ -38,11 +40,11 @@ const TECH_STACK = [
 const QA_ITEMS = [
   {
     q: 'What would you do differently if you started over?',
-    a: 'I\'d start with the state machine and etcd coordination layer before writing a single line of training code. I spent a lot of time debugging timing issues because I built the training loop first and bolted coordination on later. The state machine is the heart of the system — everything else flows from "what state is the run in right now?" Starting there would have saved me weeks.',
+    a: 'I\'d start with the state machine and etcd coordination layer before writing a single line of training code. I spent a lot of time debugging timing issues because I built the training loop first and bolted coordination on later. The state machine is the heart of the system. Everything else flows from "what state is the run in right now?" Starting there would have saved me weeks.',
   },
   {
     q: 'How does this compare to what companies like Meta actually use?',
-    a: 'The architecture pattern is the same — control plane / data plane split, async checkpointing, content-addressed storage — but at a different scale. Meta\'s systems handle thousands of GPUs across data centers with dedicated hardware for checkpoint storage. Mine runs on a single 4-vCPU VPS with 2 CPU-only workers. The engineering principles are identical though: atomic commits, heartbeat-based failure detection, manifest-driven recovery. I built this to prove I understand the architecture, not to compete with their scale.',
+    a: 'The architecture pattern is the same: control plane / data plane split, async checkpointing, content-addressed storage. But at a different scale. Meta\'s systems handle thousands of GPUs across data centers with dedicated hardware for checkpoint storage. Mine runs on a single 4-vCPU VPS with 2 CPU-only workers. The engineering principles are identical though: atomic commits, heartbeat-based failure detection, manifest-driven recovery. I built this to prove I understand the architecture, not to compete with their scale.',
   },
   {
     q: 'What was the hardest bug you ran into?',
@@ -50,15 +52,15 @@ const QA_ITEMS = [
   },
   {
     q: 'Why not just use an existing checkpoint library?',
-    a: 'Libraries like PyTorch\'s built-in checkpointing just serialize model weights to a file. They don\'t handle the hard parts: When do you save? How do you coordinate multiple workers? What if the save itself fails? How do you detect a dead worker? How do you resume from the right checkpoint? I wanted to build the full coordination system — the orchestration layer that makes checkpointing actually reliable in a distributed setting.',
+    a: 'Libraries like PyTorch\'s built-in checkpointing just serialize model weights to a file. They don\'t handle the hard parts: When do you save? How do you coordinate multiple workers? What if the save itself fails? How do you detect a dead worker? How do you resume from the right checkpoint? I wanted to build the full coordination system, the orchestration layer that makes checkpointing actually reliable in a distributed setting.',
   },
   {
-    q: 'How would this work at real scale — thousands of GPUs?',
-    a: 'The architecture scales horizontally. The control plane would need to be replicated for availability (multiple FastAPI instances behind a load balancer, with etcd handling consensus). The Rust data plane already handles concurrent shard uploads, so you\'d run multiple data plane instances close to storage. The biggest change would be sharding strategy — instead of one shard per rank, you\'d want hierarchical checkpointing where each node saves locally first, then async-uploads to durable storage. The state machine and coordination protocol wouldn\'t change at all.',
+    q: 'How would this work at real scale, thousands of GPUs?',
+    a: 'The architecture scales horizontally. The control plane would need to be replicated for availability (multiple FastAPI instances behind a load balancer, with etcd handling consensus). The Rust data plane already handles concurrent shard uploads, so you\'d run multiple data plane instances close to storage. The biggest change would be sharding strategy. Instead of one shard per rank, you\'d want hierarchical checkpointing where each node saves locally first, then async-uploads to durable storage. The state machine and coordination protocol wouldn\'t change at all.',
   },
   {
     q: 'What did you learn from building this?',
-    a: 'The biggest lesson was that distributed systems fail in ways you can\'t predict, so you have to design for failure from the start — not as an afterthought. I also learned that the "boring" parts (state machines, heartbeats, retry logic) are what make the system actually work. The flashy parts (Rust, gRPC, streaming) are implementation details. If your coordination is wrong, nothing else matters.',
+    a: 'The biggest lesson was that distributed systems fail in ways you can\'t predict, so you have to design for failure from the start, not as an afterthought. I also learned that the "boring" parts (state machines, heartbeats, retry logic) are what make the system actually work. The flashy parts (Rust, gRPC, streaming) are implementation details. If your coordination is wrong, nothing else matters.',
   },
 ];
 
@@ -77,7 +79,7 @@ export default function LandingPage() {
         {/* Grid pattern overlay */}
         <div className="absolute inset-0 bg-grid opacity-60" />
 
-        <div className="relative max-w-4xl mx-auto px-5 pt-28 pb-16 text-center">
+        <div className="relative max-w-4xl mx-auto px-5 pt-16 md:pt-32 pb-16 text-center">
           <p className="text-sm font-semibold text-brand-violet uppercase tracking-widest mb-6">
             A Portfolio Project by Tasfiq
           </p>
@@ -91,7 +93,7 @@ export default function LandingPage() {
           <p className="mt-8 text-xl text-txt-2 max-w-2xl mx-auto leading-relaxed">
             Training AI models can take hours or days across many machines.
             If one machine dies, all progress is lost.{' '}
-            <span className="text-txt-1 font-medium">This is my answer — a fault-tolerant checkpoint runtime
+            <span className="text-txt-1 font-medium">This is my answer: a fault-tolerant checkpoint runtime
             I designed and built from scratch</span> that saves progress automatically and recovers instantly.
           </p>
 
@@ -145,7 +147,7 @@ export default function LandingPage() {
                 kept coming up: <span className="text-err font-medium">hardware fails all the time at scale.</span>
               </p>
               <p>
-                Imagine writing a 50-page essay for 8 hours — then your computer crashes
+                Imagine writing a 50-page essay for 8 hours, then your computer crashes
                 and you never saved. You start from page 1. That's what happens during
                 AI training when a machine dies without checkpointing.
               </p>
@@ -167,7 +169,7 @@ export default function LandingPage() {
             </div>
             <div className="space-y-3 text-base text-txt-2 leading-relaxed">
               <p>
-                So I built a system that automatically saves a snapshot of everything the AI has learned —
+                So I built a system that automatically saves a snapshot of everything the AI has learned,
                 every 50 training steps. Like hitting{' '}
                 <span className="text-ok font-medium">Ctrl+S every few seconds.</span>
               </p>
@@ -191,7 +193,7 @@ export default function LandingPage() {
           My Engineering Decisions
         </h2>
         <p className="text-base text-txt-3 mb-12 max-w-xl">
-          Why I made each technical choice — not just what I used
+          Why I made each technical choice, not just what I used
         </p>
 
         <div className="space-y-6">
@@ -207,10 +209,10 @@ export default function LandingPage() {
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
                   I chose this because it mirrors how real infrastructure at companies like Meta works.
-                  The <span className="text-info font-medium">Control Plane</span> (Python/FastAPI) is the brain — it decides{' '}
+                  The <span className="text-info font-medium">Control Plane</span> (Python/FastAPI) is the brain. It decides{' '}
                   <em>when</em> to save, tracks which machines are alive via etcd leases, and manages the training lifecycle
                   through an 8-state machine.
-                  The <span className="text-recover font-medium">Data Plane</span> (Rust) does the heavy lifting — it{' '}
+                  The <span className="text-recover font-medium">Data Plane</span> (Rust) does the heavy lifting. It{' '}
                   <em>actually moves</em> checkpoint data to S3 storage via gRPC streaming as fast as possible.
                   Separating these concerns means each can be optimized independently.
                 </p>
@@ -229,7 +231,7 @@ export default function LandingPage() {
                   I wrote the Data Plane in Rust for speed and safety
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  I could have done everything in Python, but the bottleneck in checkpointing is I/O —
+                  I could have done everything in Python, but the bottleneck in checkpointing is I/O:
                   moving gigabytes of model weights to storage. Rust gives me zero-overhead async I/O via Tokio
                   and memory safety without a garbage collector. The result: checkpoint data streams to S3 storage
                   via gRPC at near-wire speed, with SHA-256 checksums verifying every byte. If a write fails,
@@ -250,7 +252,7 @@ export default function LandingPage() {
                   I used an 8-state machine to coordinate everything
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  The hardest part wasn't writing the training loop — it was coordinating everything around it.
+                  The hardest part wasn't writing the training loop. It was coordinating everything around it.
                   The system tracks every training run through 8 possible states:{' '}
                   <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded text-txt-2 font-mono">
                     CREATED → RUNNING → CHECKPOINTING → COMMITTED
@@ -260,7 +262,7 @@ export default function LandingPage() {
                     FAILED → RECOVERING → RUNNING
                   </code>.
                   This state machine lives in etcd (a distributed key-value store), so every component
-                  always knows exactly what's happening — even across multiple machines.
+                  always knows exactly what's happening, even across multiple machines.
                 </p>
               </div>
             </div>
@@ -274,7 +276,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-txt-1 mb-2">
-                  I made it real — not a mock or simulation
+                  I made it real, not a mock or simulation
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
                   Anyone can draw architecture diagrams. I wanted to actually run it. Everything runs as
@@ -282,7 +284,7 @@ export default function LandingPage() {
                   Real checkpoint data saves to real object storage (MinIO, S3-compatible).
                   When you click "Kill" in the demo, it sends{' '}
                   <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded text-txt-2 font-mono">docker kill</code>{' '}
-                  to a real container — the recovery you see is the actual system doing its job.
+                  to a real container. The recovery you see is the actual system doing its job.
                 </p>
               </div>
             </div>
@@ -297,7 +299,7 @@ export default function LandingPage() {
           I Built This Demo So You Can Break It
         </h2>
         <p className="text-base text-txt-3 mb-12 max-w-xl">
-          Three steps — takes about 30 seconds
+          Three steps, takes about 30 seconds
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -321,7 +323,7 @@ export default function LandingPage() {
               Click the Kill button to destroy one of the training servers.
               This sends a real{' '}
               <code className="text-xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">docker kill</code>{' '}
-              command — the container actually dies on the server in Virginia.
+              command, and the container actually dies on the server in Virginia.
             </p>
           </div>
 
@@ -332,7 +334,7 @@ export default function LandingPage() {
             <h3 className="text-lg font-bold text-txt-1">It Recovers Itself</h3>
             <p className="text-base text-txt-2 leading-relaxed">
               The system detects the crash via missed heartbeats, restarts the server, loads the last checkpoint
-              from storage, and resumes training — all automatically in under 5 seconds.
+              from storage, and resumes training. All automatically in under 5 seconds.
             </p>
           </div>
         </div>
@@ -357,7 +359,7 @@ export default function LandingPage() {
           What's Actually Running Right Now
         </h2>
         <p className="text-base text-txt-3 mb-10 max-w-xl">
-          This isn't a mock-up — 11 real Docker containers are running on a VPS I provisioned
+          This isn't a mock-up. 11 real Docker containers are running on a VPS I provisioned
         </p>
 
         <div className="card p-6 space-y-6">
@@ -455,7 +457,7 @@ export default function LandingPage() {
             </div>
             <p className="text-sm text-txt-2 leading-relaxed">
               How do you know a machine is dead vs. just slow? Each worker sends heartbeats to etcd with a TTL lease.
-              If heartbeats stop, the lease expires and the control plane knows that worker is gone — not guessing,
+              If heartbeats stop, the lease expires and the control plane knows that worker is gone. Not guessing,
               not polling, just a clean timeout. This is the same pattern used in production Kubernetes clusters.
             </p>
           </div>
@@ -471,7 +473,7 @@ export default function LandingPage() {
               <h3 className="text-base font-bold text-txt-1">Content-Addressed Storage</h3>
             </div>
             <p className="text-sm text-txt-2 leading-relaxed">
-              What if the same shard gets uploaded twice? Each file is named by its SHA-256 hash — so
+              What if the same shard gets uploaded twice? Each file is named by its SHA-256 hash, so
               identical data always maps to the same key. This makes writes idempotent: if a retry re-uploads
               the same shard, it just overwrites with identical content. No duplicates, no corruption, no wasted storage.
             </p>
@@ -489,7 +491,7 @@ export default function LandingPage() {
             </div>
             <p className="text-sm text-txt-2 leading-relaxed">
               What if checkpoints come in faster than storage can handle? The Rust data plane uses a bounded queue.
-              If the queue fills up, it pushes back on the control plane to slow down — instead of crashing with
+              If the queue fills up, it pushes back on the control plane to slow down instead of crashing with
               out-of-memory errors. This is the same pattern used in TCP flow control and production message queues.
             </p>
           </div>
@@ -512,7 +514,7 @@ export default function LandingPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <p className="text-base text-txt-2">
-                <span className="text-txt-1 font-medium">The demo panel shows real Docker logs</span> — actual container
+                <span className="text-txt-1 font-medium">The demo panel shows real Docker logs</span>, actual container
                 output streaming in real-time, not pre-recorded text
               </p>
             </div>
@@ -521,7 +523,7 @@ export default function LandingPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <p className="text-base text-txt-2">
-                <span className="text-txt-1 font-medium">The storage browser shows real S3 files</span> — checkpoint shards
+                <span className="text-txt-1 font-medium">The storage browser shows real S3 files</span>, checkpoint shards
                 with SHA-256 hashes appear as they're written
               </p>
             </div>
@@ -531,7 +533,7 @@ export default function LandingPage() {
               </svg>
               <p className="text-base text-txt-2">
                 <span className="text-txt-1 font-medium">The container panel shows real{' '}
-                <code className="text-xs bg-surface-3 px-1 py-0.5 rounded font-mono">docker ps</code> output</span> — you can
+                <code className="text-xs bg-surface-3 px-1 py-0.5 rounded font-mono">docker ps</code> output</span>. You can
                 see the killed container go down and come back
               </p>
             </div>
@@ -540,7 +542,7 @@ export default function LandingPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <p className="text-base text-txt-2">
-                <span className="text-txt-1 font-medium">The system info shows real server stats</span> — hostname, CPU count,
+                <span className="text-txt-1 font-medium">The system info shows real server stats</span>: hostname, CPU count,
                 memory usage, Docker version from the actual Hetzner VPS
               </p>
             </div>
@@ -609,11 +611,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Visitor Stats ────────────────────────────────────── */}
-      <section className="max-w-sm mx-auto px-5 py-12">
-        <VisitorStats />
-      </section>
-
       {/* ── Footer CTA ───────────────────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-20 text-center">
         <div className="space-y-6">
@@ -621,25 +618,30 @@ export default function LandingPage() {
           <p className="text-base text-txt-2 max-w-md mx-auto">
             Crash a real server and watch it recover. The live demo takes 30 seconds.
           </p>
-          <Link
-            to="/demo"
-            className="btn-primary cursor-pointer inline-flex items-center gap-2 px-8 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150"
-          >
-            Try Live Demo
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Link>
-          <p className="text-sm text-txt-3">
-            Built by Tasfiq J &middot;{' '}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              to="/demo"
+              className="btn-primary cursor-pointer inline-flex items-center gap-2 px-8 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150"
+            >
+              Try Live Demo
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
             <a
               href="https://github.com/TasfiqJ/checkpoint-runtime"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-brand-violet hover:text-brand-violet cursor-pointer transition-colors duration-150"
+              className="btn-ghost cursor-pointer inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150"
             >
-              View on GitHub
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+              </svg>
+              View Source Code
             </a>
+          </div>
+          <p className="text-sm text-txt-3">
+            Built by Tasfiq J
           </p>
         </div>
       </section>

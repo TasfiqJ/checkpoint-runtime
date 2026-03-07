@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600;1,700;1,800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -21,10 +21,10 @@
   --txt-3: 156 163 175;
 
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.06);
-  --shadow-glow-sm: 0 0 15px rgba(99, 102, 241, 0.08);
-  --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.12);
-  --shadow-glow-lg: 0 0 60px rgba(99, 102, 241, 0.15);
-  --grid-line: rgba(99, 102, 241, 0.08);
+  --shadow-glow-sm: 0 0 15px rgba(22, 101, 52, 0.08);
+  --shadow-glow: 0 0 30px rgba(22, 101, 52, 0.12);
+  --shadow-glow-lg: 0 0 60px rgba(22, 101, 52, 0.15);
+  --grid-line: rgba(22, 101, 52, 0.15);
 }
 
 .dark {
@@ -43,10 +43,10 @@
   --txt-3: 94 94 120;
 
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3);
-  --shadow-glow-sm: 0 0 15px rgba(99, 102, 241, 0.15);
-  --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.2);
-  --shadow-glow-lg: 0 0 60px rgba(99, 102, 241, 0.25);
-  --grid-line: rgba(99, 102, 241, 0.05);
+  --shadow-glow-sm: 0 0 15px rgba(22, 101, 52, 0.15);
+  --shadow-glow: 0 0 30px rgba(22, 101, 52, 0.2);
+  --shadow-glow-lg: 0 0 60px rgba(22, 101, 52, 0.25);
+  --grid-line: rgba(22, 101, 52, 0.12);
 }
 
 @layer base {
@@ -56,8 +56,12 @@
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
+  h1, h2 {
+    @apply font-serif;
+  }
+
   ::selection {
-    background-color: rgba(139, 92, 246, 0.25);
+    background-color: rgba(22, 101, 52, 0.2);
     color: rgb(var(--txt-1));
   }
 
@@ -126,7 +130,7 @@
     @apply inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-200 cursor-pointer;
   }
   .btn-primary {
-    @apply btn px-5 py-2.5 text-base text-white bg-gradient-to-r from-brand-blue to-brand-violet hover:shadow-glow hover:scale-[1.02] active:scale-[0.98];
+    @apply btn px-5 py-2.5 text-base text-white bg-brand-violet hover:bg-brand-blue hover:shadow-glow hover:scale-[1.02] active:scale-[0.98];
   }
   .btn-secondary {
     @apply btn px-5 py-2.5 text-base text-txt-1 bg-surface-3 hover:bg-surface-4;
@@ -141,9 +145,9 @@
     @apply btn px-3 py-1.5 text-sm text-ok bg-ok-muted hover:bg-ok/20 rounded-xl;
   }
 
-  /* ── Gradient text ──────────────────────────── */
+  /* ── Accent text (serif italic in brand green) ─ */
   .gradient-text {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-blue via-brand-violet to-brand-pink;
+    @apply text-brand-violet italic font-serif;
   }
 
   /* ── Page layout ────────────────────────────── */
