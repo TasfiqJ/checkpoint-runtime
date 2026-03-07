@@ -216,6 +216,16 @@ export default function DemoPage() {
   const committedCheckpoints = checkpoints.filter(cp => cp.state === 'COMMITTED');
   const totalBytes = committedCheckpoints.reduce((sum, cp) => sum + cp.total_bytes, 0);
 
+  // Get the two most relevant workers: prefer ACTIVE, then most recent heartbeat.
+  // After kill/restart cycles, rank increments so we can't match by rank index.
+  const relevantWorkers = [...workers]
+    .sort((a, b) => {
+      if (a.status === 'ACTIVE' && b.status !== 'ACTIVE') return -1;
+      if (b.status === 'ACTIVE' && a.status !== 'ACTIVE') return 1;
+      return new Date(b.last_heartbeat).getTime() - new Date(a.last_heartbeat).getTime();
+    })
+    .slice(0, 2);
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -309,7 +319,7 @@ export default function DemoPage() {
               <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">Active Workers</p>
                 <p className="text-xl font-mono font-bold text-gray-100 mt-1">
-                  {workers.filter(w => w.status === 'ACTIVE').length}/{workers.length}
+                  {workers.filter(w => w.status === 'ACTIVE').length}/2
                 </p>
               </div>
             </div>
@@ -319,7 +329,7 @@ export default function DemoPage() {
               <h3 className="text-sm font-semibold text-gray-100 mb-3">Training Workers</h3>
               <div className="grid grid-cols-2 gap-3">
                 {['ckpt-worker-0', 'ckpt-worker-1'].map((container, idx) => {
-                  const worker = workers.find(w => w.rank === idx);
+                  const worker = relevantWorkers[idx];
                   const isAlive = worker?.status === 'ACTIVE';
 
                   return (
