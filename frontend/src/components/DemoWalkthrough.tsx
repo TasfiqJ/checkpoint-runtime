@@ -37,25 +37,20 @@ export default function DemoWalkthrough({ currentStep }: Props) {
   return (
     <div className="glass-strong p-4">
       {/* Progress bar */}
-      <div className="flex items-center gap-3 mb-3">
-        <span className="text-2xs font-semibold text-txt-3 uppercase tracking-wider">
-          Step {num + 1}/{STEPS.length}
-        </span>
-        <div className="flex gap-1">
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 rounded-full transition-all duration-300 ${
-                i <= num ? 'w-6 bg-brand-violet' : 'w-2 bg-surface-3'
-              }`}
-            />
-          ))}
-        </div>
+      <div className="flex items-center gap-1 mb-3">
+        {STEPS.map((_, i) => (
+          <div
+            key={i}
+            className={`h-1 rounded-full transition-all duration-300 ${
+              i <= num ? 'w-6 bg-brand-violet' : 'w-2 bg-surface-3'
+            }`}
+          />
+        ))}
       </div>
 
       {/* Current step */}
-      <h4 className="text-sm font-semibold text-txt-1 mb-1">{step.title}</h4>
-      <p className="text-xs text-txt-2 leading-relaxed">{step.description}</p>
+      <h4 className="text-base font-semibold text-txt-1 mb-1">{step.title}</h4>
+      <p className="text-sm text-txt-2 leading-relaxed">{step.description}</p>
     </div>
   );
 }

@@ -236,13 +236,13 @@ export default function DemoPage() {
             Live Infrastructure Running
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-txt-1 tracking-tight leading-tight">
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-txt-1 tracking-tight leading-tight">
             Crash a real server.
             <br />
             <span className="gradient-text">Watch it recover automatically.</span>
           </h1>
 
-          <p className="text-txt-2 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
+          <p className="text-txt-2 text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed">
             This is a <span className="text-txt-1 font-medium">live demo</span> of fault-tolerant AI training infrastructure.
             Two real servers are training a model right now on a cloud machine in Virginia.
             You'll crash one on purpose and see the system recover with zero data loss.
@@ -259,10 +259,10 @@ export default function DemoPage() {
 
         {/* What will happen - step by step */}
         <div>
-          <h2 className="text-xl font-bold text-txt-1 text-center mb-2">
+          <h2 className="text-2xl font-bold text-txt-1 text-center mb-2">
             What's going to happen
           </h2>
-          <p className="text-sm text-txt-3 text-center mb-8">
+          <p className="text-base text-txt-3 text-center mb-8">
             The demo has 3 stages — it takes about 30 seconds
           </p>
 
@@ -272,9 +272,9 @@ export default function DemoPage() {
                 <div className="w-10 h-10 rounded-xl bg-ok-muted flex items-center justify-center text-ok font-bold text-base">
                   1
                 </div>
-                <h3 className="text-base font-bold text-txt-1">Training Starts</h3>
+                <h3 className="text-lg font-bold text-txt-1">Training Starts</h3>
               </div>
-              <p className="text-sm text-txt-2 leading-relaxed">
+              <p className="text-base text-txt-2 leading-relaxed">
                 Two servers begin training an AI model. You'll see the <span className="text-txt-1 font-medium">step counter climbing</span> and{' '}
                 <span className="text-txt-1 font-medium">checkpoints saving</span> automatically every 50 steps —
                 like auto-save in a video game.
@@ -286,12 +286,12 @@ export default function DemoPage() {
                 <div className="w-10 h-10 rounded-xl bg-err-muted flex items-center justify-center text-err font-bold text-base">
                   2
                 </div>
-                <h3 className="text-base font-bold text-txt-1">You Crash a Server</h3>
+                <h3 className="text-lg font-bold text-txt-1">You Crash a Server</h3>
               </div>
-              <p className="text-sm text-txt-2 leading-relaxed">
+              <p className="text-base text-txt-2 leading-relaxed">
                 You press a <span className="text-err font-medium">"Kill" button</span> to destroy one of the training servers.
                 This sends a real{' '}
-                <code className="text-2xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">docker kill</code>{' '}
+                <code className="text-xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">docker kill</code>{' '}
                 command — the container actually shuts down on the server.
               </p>
             </div>
@@ -301,9 +301,9 @@ export default function DemoPage() {
                 <div className="w-10 h-10 rounded-xl bg-info-muted flex items-center justify-center text-info font-bold text-base">
                   3
                 </div>
-                <h3 className="text-base font-bold text-txt-1">Auto-Recovery</h3>
+                <h3 className="text-lg font-bold text-txt-1">Auto-Recovery</h3>
               </div>
-              <p className="text-sm text-txt-2 leading-relaxed">
+              <p className="text-base text-txt-2 leading-relaxed">
                 The system <span className="text-txt-1 font-medium">detects the crash</span>, restarts the server,{' '}
                 <span className="text-txt-1 font-medium">loads the last save point</span> from storage, and{' '}
                 <span className="text-ok font-medium">resumes training</span> — all automatically in ~5 seconds.
@@ -314,39 +314,39 @@ export default function DemoPage() {
 
         {/* What you'll see (proof panels explanation) */}
         <div>
-          <h2 className="text-xl font-bold text-txt-1 text-center mb-2">
+          <h2 className="text-2xl font-bold text-txt-1 text-center mb-2">
             How you'll know it's real
           </h2>
-          <p className="text-sm text-txt-3 text-center mb-6">
+          <p className="text-base text-txt-3 text-center mb-6">
             The right side of the demo shows proof this is actual backend infrastructure
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="card px-4 py-3 flex items-start gap-3">
               <span className="panel-tag mt-0.5">stdout</span>
               <div>
-                <p className="text-sm font-medium text-txt-1">Live Logs</p>
-                <p className="text-xs text-txt-3">Real-time output from Docker containers — you'll see heartbeats, checkpoint saves, and failure detection</p>
+                <p className="text-base font-medium text-txt-1">Live Logs</p>
+                <p className="text-sm text-txt-3">Real-time output from Docker containers — you'll see heartbeats, checkpoint saves, and failure detection</p>
               </div>
             </div>
             <div className="card px-4 py-3 flex items-start gap-3">
               <span className="panel-tag mt-0.5">S3</span>
               <div>
-                <p className="text-sm font-medium text-txt-1">Storage Browser</p>
-                <p className="text-xs text-txt-3">Real MinIO files appearing as checkpoints are saved — with SHA-256 hashes proving data integrity</p>
+                <p className="text-base font-medium text-txt-1">Storage Browser</p>
+                <p className="text-sm text-txt-3">Real MinIO files appearing as checkpoints are saved — with SHA-256 hashes proving data integrity</p>
               </div>
             </div>
             <div className="card px-4 py-3 flex items-start gap-3">
               <span className="panel-tag mt-0.5">docker</span>
               <div>
-                <p className="text-sm font-medium text-txt-1">Container Status</p>
-                <p className="text-xs text-txt-3">Live Docker container list — watch the killed container go down and come back up</p>
+                <p className="text-base font-medium text-txt-1">Container Status</p>
+                <p className="text-sm text-txt-3">Live Docker container list — watch the killed container go down and come back up</p>
               </div>
             </div>
             <div className="card px-4 py-3 flex items-start gap-3">
               <span className="panel-tag mt-0.5">sys</span>
               <div>
-                <p className="text-sm font-medium text-txt-1">Server Info</p>
-                <p className="text-xs text-txt-3">Real hostname, CPU, memory, and uptime from the Hetzner VPS in Virginia</p>
+                <p className="text-base font-medium text-txt-1">Server Info</p>
+                <p className="text-sm text-txt-3">Real hostname, CPU, memory, and uptime from the Hetzner VPS in Virginia</p>
               </div>
             </div>
           </div>

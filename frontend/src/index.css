@@ -4,14 +4,61 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme variables (light = default, dark = .dark class) ── */
+:root {
+  --surface-0: 255 255 255;
+  --surface-1: 249 250 251;
+  --surface-2: 243 244 246;
+  --surface-3: 229 231 235;
+  --surface-4: 209 213 219;
+
+  --line: 229 231 235;
+  --line-subtle: 243 244 246;
+  --line-emphasis: 209 213 219;
+
+  --txt-1: 17 24 39;
+  --txt-2: 75 85 99;
+  --txt-3: 156 163 175;
+
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --shadow-glow-sm: 0 0 15px rgba(99, 102, 241, 0.08);
+  --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.12);
+  --shadow-glow-lg: 0 0 60px rgba(99, 102, 241, 0.15);
+  --grid-line: rgba(99, 102, 241, 0.08);
+}
+
+.dark {
+  --surface-0: 11 11 16;
+  --surface-1: 17 17 24;
+  --surface-2: 25 25 34;
+  --surface-3: 34 34 46;
+  --surface-4: 44 44 58;
+
+  --line: 31 31 46;
+  --line-subtle: 22 22 34;
+  --line-emphasis: 46 46 66;
+
+  --txt-1: 238 238 242;
+  --txt-2: 157 157 181;
+  --txt-3: 94 94 120;
+
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --shadow-glow-sm: 0 0 15px rgba(99, 102, 241, 0.15);
+  --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.2);
+  --shadow-glow-lg: 0 0 60px rgba(99, 102, 241, 0.25);
+  --grid-line: rgba(99, 102, 241, 0.05);
+}
+
 @layer base {
   body {
     @apply bg-surface-0 text-txt-1 antialiased;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   ::selection {
-    @apply bg-brand-violet/30 text-white;
+    background-color: rgba(139, 92, 246, 0.25);
+    color: rgb(var(--txt-1));
   }
 
   ::-webkit-scrollbar { @apply w-1.5; }
@@ -42,36 +89,36 @@
     @apply px-4 py-3 border-b border-line flex items-center gap-2.5;
   }
   .panel-tag {
-    @apply text-2xs font-mono font-medium bg-surface-3 text-txt-3 px-2 py-0.5 rounded-md;
+    @apply text-xs font-mono font-medium bg-surface-3 text-txt-3 px-2 py-0.5 rounded-md;
   }
   .panel-title {
-    @apply text-xs font-semibold text-txt-2 tracking-wide;
+    @apply text-sm font-semibold text-txt-2 tracking-wide;
   }
 
   /* ── Helper text — friendly explanations ────── */
   .helper {
-    @apply text-2xs text-txt-3 leading-relaxed mt-1;
+    @apply text-xs text-txt-3 leading-relaxed mt-1;
   }
 
   /* ── Metric card ────────────────────────────── */
   .metric-label {
-    @apply text-2xs font-medium text-txt-3 tracking-wide;
+    @apply text-xs font-medium text-txt-3 tracking-wide;
   }
   .metric-value {
-    @apply text-xl font-bold font-mono text-txt-1 mt-1;
+    @apply text-2xl font-bold font-mono text-txt-1 mt-1;
   }
 
   /* ── Table ──────────────────────────────────── */
   .table-header {
-    @apply px-4 py-2.5 text-left text-2xs font-semibold text-txt-3 uppercase tracking-wider;
+    @apply px-4 py-2.5 text-left text-xs font-semibold text-txt-3 uppercase tracking-wider;
   }
   .table-cell {
-    @apply px-4 py-3 whitespace-nowrap text-sm;
+    @apply px-4 py-3 whitespace-nowrap text-base;
   }
 
   /* ── Badge ──────────────────────────────────── */
   .badge {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-2xs font-semibold tracking-wide;
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold tracking-wide;
   }
 
   /* ── Buttons ────────────────────────────────── */
@@ -79,19 +126,19 @@
     @apply inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-200 cursor-pointer;
   }
   .btn-primary {
-    @apply btn px-5 py-2.5 text-sm text-white bg-gradient-to-r from-brand-blue to-brand-violet hover:shadow-glow hover:scale-[1.02] active:scale-[0.98];
+    @apply btn px-5 py-2.5 text-base text-white bg-gradient-to-r from-brand-blue to-brand-violet hover:shadow-glow hover:scale-[1.02] active:scale-[0.98];
   }
   .btn-secondary {
-    @apply btn px-5 py-2.5 text-sm text-txt-1 bg-surface-3 hover:bg-surface-4;
+    @apply btn px-5 py-2.5 text-base text-txt-1 bg-surface-3 hover:bg-surface-4;
   }
   .btn-ghost {
     @apply btn px-4 py-2 text-sm text-txt-2 hover:text-txt-1 hover:bg-surface-3 rounded-xl;
   }
   .btn-danger {
-    @apply btn px-3 py-1.5 text-xs text-err bg-err-muted hover:bg-err/20 rounded-xl;
+    @apply btn px-3 py-1.5 text-sm text-err bg-err-muted hover:bg-err/20 rounded-xl;
   }
   .btn-success {
-    @apply btn px-3 py-1.5 text-xs text-ok bg-ok-muted hover:bg-ok/20 rounded-xl;
+    @apply btn px-3 py-1.5 text-sm text-ok bg-ok-muted hover:bg-ok/20 rounded-xl;
   }
 
   /* ── Gradient text ──────────────────────────── */
@@ -101,15 +148,15 @@
 
   /* ── Page layout ────────────────────────────── */
   .page-header {
-    @apply text-2xl font-bold text-txt-1 tracking-tight;
+    @apply text-3xl font-bold text-txt-1 tracking-tight;
   }
   .page-subtitle {
-    @apply text-sm text-txt-2 mt-1.5 leading-relaxed;
+    @apply text-base text-txt-2 mt-1.5 leading-relaxed;
   }
 
   /* ── Section counter (Firecrawl-inspired) ──── */
   .section-counter {
-    @apply inline-flex items-center gap-2 text-2xs font-mono text-txt-3 mb-8;
+    @apply inline-flex items-center gap-2 text-xs font-mono text-txt-3 mb-8;
   }
   .section-counter .num {
     @apply text-brand-violet font-semibold;
@@ -119,6 +166,14 @@
   }
   .section-counter .label {
     @apply uppercase tracking-widest;
+  }
+
+  /* ── Grid background pattern ─────────────── */
+  .bg-grid {
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 48px 48px;
   }
 
   /* ── Scroll reveal animation ──────────────── */
