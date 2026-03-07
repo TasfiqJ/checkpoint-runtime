@@ -153,7 +153,7 @@ function App() {
                     <Link
                       to={item.to}
                       onClick={() => setMenuOpen(false)}
-                      className={`block text-4xl font-serif transition-colors ${
+                      className={`block text-4xl font-serif font-bold transition-colors ${
                         isActive(item.to)
                           ? 'text-brand-violet'
                           : 'text-txt-2 hover:text-txt-1'
