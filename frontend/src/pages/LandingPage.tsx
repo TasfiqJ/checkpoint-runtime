@@ -2,6 +2,21 @@ import { Link } from 'react-router-dom';
 import ArchitectureDiagram from '../components/ArchitectureDiagram';
 import VisitorStats from '../components/VisitorStats';
 
+/** Firecrawl-style section counter: [ 01 / 07 ] · LABEL */
+function SectionCounter({ num, total, label }: { num: number; total: number; label: string }) {
+  return (
+    <div className="section-counter">
+      <span className="divider">[</span>
+      <span className="num">{String(num).padStart(2, '0')}</span>
+      <span className="divider">/</span>
+      <span>{String(total).padStart(2, '0')}</span>
+      <span className="divider">]</span>
+      <span className="divider">&middot;</span>
+      <span className="label">{label}</span>
+    </div>
+  );
+}
+
 const TECH_STACK = [
   { label: 'Rust', color: 'bg-recover/10 text-recover border-recover/20' },
   { label: 'Python', color: 'bg-info/10 text-info border-info/20' },
@@ -73,10 +88,11 @@ export default function LandingPage() {
 
       {/* ── The Problem (simple analogy) ─────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 pt-12 pb-16">
-        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 text-center mb-4">
+        <SectionCounter num={1} total={7} label="The Problem" />
+        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 mb-4">
           The Problem
         </h2>
-        <p className="text-sm text-txt-3 text-center mb-10 max-w-xl mx-auto">
+        <p className="text-sm text-txt-3 mb-10 max-w-xl">
           Why this matters in real-world AI infrastructure
         </p>
 
@@ -136,10 +152,11 @@ export default function LandingPage() {
 
       {/* ── How I Solved It ──────────────────────────────────────── */}
       <section id="how-i-solved-it" className="max-w-4xl mx-auto px-5 py-16">
-        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 text-center mb-4">
+        <SectionCounter num={2} total={7} label="Engineering" />
+        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 mb-4">
           How I Built It
         </h2>
-        <p className="text-sm text-txt-3 text-center mb-12 max-w-xl mx-auto">
+        <p className="text-sm text-txt-3 mb-12 max-w-xl">
           The key engineering decisions behind this system
         </p>
 
@@ -236,10 +253,11 @@ export default function LandingPage() {
 
       {/* ── What the Demo Actually Does ──────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
-        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 text-center mb-4">
+        <SectionCounter num={3} total={7} label="Live Demo" />
+        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 mb-4">
           What the Live Demo Shows You
         </h2>
-        <p className="text-sm text-txt-3 text-center mb-12 max-w-xl mx-auto">
+        <p className="text-sm text-txt-3 mb-12 max-w-xl">
           Three steps to see fault-tolerant recovery in action
         </p>
 
@@ -295,10 +313,11 @@ export default function LandingPage() {
 
       {/* ── What's Actually Running ──────────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
-        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 text-center mb-4">
+        <SectionCounter num={4} total={7} label="Infrastructure" />
+        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 mb-4">
           What's Running Right Now
         </h2>
-        <p className="text-sm text-txt-3 text-center mb-10 max-w-xl mx-auto">
+        <p className="text-sm text-txt-3 mb-10 max-w-xl">
           This isn't frontend magic — 11 real services are running on a cloud server
         </p>
 
@@ -347,10 +366,11 @@ export default function LandingPage() {
 
       {/* ── Architecture Diagram ─────────────────────────────────── */}
       <section id="architecture" className="max-w-4xl mx-auto px-5 py-16">
-        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 text-center mb-4">
+        <SectionCounter num={5} total={7} label="Architecture" />
+        <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 mb-4">
           System Architecture
         </h2>
-        <p className="text-sm text-txt-3 text-center mb-10 max-w-xl mx-auto">
+        <p className="text-sm text-txt-3 mb-10 max-w-xl">
           How the 11 services connect to each other
         </p>
         <ArchitectureDiagram />
@@ -358,6 +378,7 @@ export default function LandingPage() {
 
       {/* ── Not Frontend Magic ───────────────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
+        <SectionCounter num={6} total={7} label="Proof" />
         <div className="card p-8 border-brand-violet/20">
           <h2 className="text-xl font-bold text-txt-1 text-center mb-6">
             "How do I know this isn't just a fancy animation?"
@@ -405,7 +426,8 @@ export default function LandingPage() {
       </section>
 
       {/* ── Tech Stack ───────────────────────────────────────────── */}
-      <section className="max-w-4xl mx-auto px-5 py-16 text-center">
+      <section className="max-w-4xl mx-auto px-5 py-16">
+        <SectionCounter num={7} total={7} label="Stack" />
         <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 mb-3">
           Tech Stack
         </h2>

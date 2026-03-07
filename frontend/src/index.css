@@ -106,4 +106,42 @@
   .page-subtitle {
     @apply text-sm text-txt-2 mt-1.5 leading-relaxed;
   }
+
+  /* ── Section counter (Firecrawl-inspired) ──── */
+  .section-counter {
+    @apply inline-flex items-center gap-2 text-2xs font-mono text-txt-3 mb-8;
+  }
+  .section-counter .num {
+    @apply text-brand-violet font-semibold;
+  }
+  .section-counter .divider {
+    @apply text-line-emphasis;
+  }
+  .section-counter .label {
+    @apply uppercase tracking-widest;
+  }
+
+  /* ── Scroll reveal animation ──────────────── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── Stagger children ─────────────────────── */
+  .stagger > * {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .stagger.visible > *:nth-child(1) { transition-delay: 0ms; opacity: 1; transform: translateY(0); }
+  .stagger.visible > *:nth-child(2) { transition-delay: 80ms; opacity: 1; transform: translateY(0); }
+  .stagger.visible > *:nth-child(3) { transition-delay: 160ms; opacity: 1; transform: translateY(0); }
+  .stagger.visible > *:nth-child(4) { transition-delay: 240ms; opacity: 1; transform: translateY(0); }
+  .stagger.visible > *:nth-child(5) { transition-delay: 320ms; opacity: 1; transform: translateY(0); }
+  .stagger.visible > *:nth-child(6) { transition-delay: 400ms; opacity: 1; transform: translateY(0); }
 }

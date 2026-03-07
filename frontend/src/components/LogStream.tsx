@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { API_BASE } from '../config/api';
 
 interface LogLine {
@@ -32,6 +32,7 @@ const MAX_LINES = 150;
 
 export default function LogStream({ active }: { active: boolean }) {
   const [lines, setLines] = useState<LogLine[]>([]);
+  const [userScrolled, setUserScrolled] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -53,9 +54,20 @@ export default function LogStream({ active }: { active: boolean }) {
     return () => es.close();
   }, [active]);
 
+  // Auto-scroll only when user hasn't scrolled up
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lines]);
+    if (!userScrolled) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [lines, userScrolled]);
+
+  // Detect if user scrolled away from bottom
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    setUserScrolled(!atBottom);
+  }, []);
 
   return (
     <div className="card overflow-hidden">
@@ -70,8 +82,18 @@ export default function LogStream({ active }: { active: boolean }) {
         )}
       </div>
 
+      <div className="px-3.5 py-2 border-b border-line-subtle">
+        <p className="text-2xs text-txt-3 leading-relaxed">
+          Real-time output from Docker containers. Look for{' '}
+          <span className="text-txt-2 font-medium">checkpoint committed</span>,{' '}
+          <span className="text-txt-2 font-medium">heartbeat timeout</span>, and{' '}
+          <span className="text-txt-2 font-medium">restored from checkpoint</span> messages.
+        </p>
+      </div>
+
       <div
         ref={containerRef}
+        onScroll={handleScroll}
         className="bg-surface-0 font-mono text-[11px] leading-relaxed max-h-72 overflow-y-auto p-2.5 space-y-px"
       >
         {lines.length === 0 ? (
@@ -100,6 +122,19 @@ export default function LogStream({ active }: { active: boolean }) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Scroll-to-bottom button when user has scrolled up */}
+      {userScrolled && lines.length > 0 && (
+        <button
+          onClick={() => {
+            setUserScrolled(false);
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="w-full py-1.5 text-2xs text-brand-violet bg-surface-2 hover:bg-surface-3 border-t border-line-subtle transition-colors cursor-pointer"
+        >
+          Scroll to latest logs
+        </button>
+      )}
     </div>
   );
 }

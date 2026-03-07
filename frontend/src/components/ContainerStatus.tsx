@@ -22,6 +22,13 @@ export default function ContainerStatus() {
         <h4 className="panel-title">Infrastructure</h4>
       </div>
 
+      <div className="px-3.5 py-2 border-b border-line-subtle">
+        <p className="text-2xs text-txt-3 leading-relaxed">
+          Live Docker containers on the server. When you kill a worker, watch its status change from{' '}
+          <span className="text-ok">running</span> to <span className="text-err">exited</span> and back.
+        </p>
+      </div>
+
       <div className="divide-y divide-line-subtle max-h-64 overflow-y-auto">
         {containers && containers.length > 0 ? (
           containers.map((c) => {

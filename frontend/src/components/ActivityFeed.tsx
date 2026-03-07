@@ -45,6 +45,12 @@ export default function ActivityFeed() {
         <h4 className="panel-title">Activity</h4>
       </div>
 
+      <div className="px-3.5 py-2 border-b border-line-subtle">
+        <p className="text-2xs text-txt-3 leading-relaxed">
+          Recent visitor activity and kill events from people using this demo around the world.
+        </p>
+      </div>
+
       <div className="max-h-48 overflow-y-auto">
         {items.length === 0 ? (
           <div className="px-3 py-4 text-xs text-txt-3 text-center">
