@@ -34,6 +34,14 @@ const STATUS_HEADLINE: Partial<Record<RunState, string>> = {
   COMMITTED: 'Checkpoint Committed',
 };
 
+const STATUS_EXPLAIN: Partial<Record<RunState, string>> = {
+  RUNNING: 'Both workers are training the AI model together. Checkpoints are being saved automatically every 50 steps.',
+  FAILED: 'The system detected a worker stopped sending heartbeats. It\'s about to start recovery.',
+  RECOVERING: 'The crashed worker is restarting and loading the last saved checkpoint from storage.',
+  CHECKPOINTING: 'The system is saving the AI model\'s current state to storage right now.',
+  COMMITTED: 'A checkpoint was just saved successfully. Training continues.',
+};
+
 // ── State-specific left border class ────────────────────────────────────────
 
 const STATE_BORDER: Partial<Record<RunState, string>> = {
@@ -217,62 +225,135 @@ export default function DemoPage() {
 
   if (!runId && !starting) {
     return (
-      <div className="max-w-4xl mx-auto py-12 space-y-10">
+      <div className="max-w-4xl mx-auto py-12 space-y-12">
         {/* Hero */}
-        <div className="text-center space-y-5">
-          <h1 className="text-3xl font-bold text-txt-1 tracking-tight">
-            Watch AI Training Survive a Crash
+        <div className="text-center space-y-6">
+          <div className="inline-flex items-center gap-2 bg-ok-muted text-ok text-xs font-semibold px-3 py-1 rounded-full">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ok opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-ok" />
+            </span>
+            Live Infrastructure Running
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-txt-1 tracking-tight leading-tight">
+            Crash a real server.
+            <br />
+            <span className="gradient-text">Watch it recover automatically.</span>
           </h1>
-          <p className="text-txt-2 text-sm max-w-xl mx-auto leading-relaxed">
-            This demo runs a real AI training job across multiple computers. You get to crash one on purpose
-            and watch the system recover automatically -- no progress lost. Everything you see is live infrastructure,
-            not a simulation.
+
+          <p className="text-txt-2 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
+            This is a <span className="text-txt-1 font-medium">live demo</span> of fault-tolerant AI training infrastructure.
+            Two real servers are training a model right now on a cloud machine in Virginia.
+            You'll crash one on purpose and see the system recover with zero data loss.
           </p>
+
           <button
             onClick={handleStart}
             disabled={starting}
-            className="btn-primary px-8 py-3.5 text-base cursor-pointer"
+            className="btn-primary px-10 py-4 text-lg cursor-pointer"
           >
-            Start Demo
+            Start the Demo
           </button>
         </div>
 
-        {/* 3-step instruction cards */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="card p-5 space-y-3">
-            <div className="w-8 h-8 rounded-lg bg-ok-muted flex items-center justify-center text-ok font-mono font-bold text-sm">
-              1
+        {/* What will happen - step by step */}
+        <div>
+          <h2 className="text-xl font-bold text-txt-1 text-center mb-2">
+            What's going to happen
+          </h2>
+          <p className="text-sm text-txt-3 text-center mb-8">
+            The demo has 3 stages — it takes about 30 seconds
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="card p-6 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-ok-muted flex items-center justify-center text-ok font-bold text-base">
+                  1
+                </div>
+                <h3 className="text-base font-bold text-txt-1">Training Starts</h3>
+              </div>
+              <p className="text-sm text-txt-2 leading-relaxed">
+                Two servers begin training an AI model. You'll see the <span className="text-txt-1 font-medium">step counter climbing</span> and{' '}
+                <span className="text-txt-1 font-medium">checkpoints saving</span> automatically every 50 steps —
+                like auto-save in a video game.
+              </p>
             </div>
-            <p className="text-sm font-medium text-txt-1">Launch Training</p>
-            <p className="text-2xs text-txt-3 leading-relaxed">
-              Two computers start teaching an AI model together, automatically saving their progress along the way.
-            </p>
-          </div>
-          <div className="card p-5 space-y-3">
-            <div className="w-8 h-8 rounded-lg bg-err-muted flex items-center justify-center text-err font-mono font-bold text-sm">
-              2
+
+            <div className="card p-6 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-err-muted flex items-center justify-center text-err font-bold text-base">
+                  2
+                </div>
+                <h3 className="text-base font-bold text-txt-1">You Crash a Server</h3>
+              </div>
+              <p className="text-sm text-txt-2 leading-relaxed">
+                You press a <span className="text-err font-medium">"Kill" button</span> to destroy one of the training servers.
+                This sends a real{' '}
+                <code className="text-2xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">docker kill</code>{' '}
+                command — the container actually shuts down on the server.
+              </p>
             </div>
-            <p className="text-sm font-medium text-txt-1">Crash a Computer</p>
-            <p className="text-2xs text-txt-3 leading-relaxed">
-              Click "Kill" to pull the plug on one of the training computers. The system will notice something is wrong.
-            </p>
-          </div>
-          <div className="card p-5 space-y-3">
-            <div className="w-8 h-8 rounded-lg bg-info-muted flex items-center justify-center text-info font-mono font-bold text-sm">
-              3
+
+            <div className="card p-6 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-info-muted flex items-center justify-center text-info font-bold text-base">
+                  3
+                </div>
+                <h3 className="text-base font-bold text-txt-1">Auto-Recovery</h3>
+              </div>
+              <p className="text-sm text-txt-2 leading-relaxed">
+                The system <span className="text-txt-1 font-medium">detects the crash</span>, restarts the server,{' '}
+                <span className="text-txt-1 font-medium">loads the last save point</span> from storage, and{' '}
+                <span className="text-ok font-medium">resumes training</span> — all automatically in ~5 seconds.
+              </p>
             </div>
-            <p className="text-sm font-medium text-txt-1">Watch It Recover</p>
-            <p className="text-2xs text-txt-3 leading-relaxed">
-              The crashed computer restarts, reloads its last save point from storage, and picks up right where it left off.
-            </p>
           </div>
         </div>
 
-        {/* Proof panels grid */}
-        <div className="space-y-3">
-          <p className="text-2xs text-txt-3 text-center uppercase tracking-widest">
-            Live infrastructure &mdash; not a simulation
+        {/* What you'll see (proof panels explanation) */}
+        <div>
+          <h2 className="text-xl font-bold text-txt-1 text-center mb-2">
+            How you'll know it's real
+          </h2>
+          <p className="text-sm text-txt-3 text-center mb-6">
+            The right side of the demo shows proof this is actual backend infrastructure
           </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="card px-4 py-3 flex items-start gap-3">
+              <span className="panel-tag mt-0.5">stdout</span>
+              <div>
+                <p className="text-sm font-medium text-txt-1">Live Logs</p>
+                <p className="text-xs text-txt-3">Real-time output from Docker containers — you'll see heartbeats, checkpoint saves, and failure detection</p>
+              </div>
+            </div>
+            <div className="card px-4 py-3 flex items-start gap-3">
+              <span className="panel-tag mt-0.5">S3</span>
+              <div>
+                <p className="text-sm font-medium text-txt-1">Storage Browser</p>
+                <p className="text-xs text-txt-3">Real MinIO files appearing as checkpoints are saved — with SHA-256 hashes proving data integrity</p>
+              </div>
+            </div>
+            <div className="card px-4 py-3 flex items-start gap-3">
+              <span className="panel-tag mt-0.5">docker</span>
+              <div>
+                <p className="text-sm font-medium text-txt-1">Container Status</p>
+                <p className="text-xs text-txt-3">Live Docker container list — watch the killed container go down and come back up</p>
+              </div>
+            </div>
+            <div className="card px-4 py-3 flex items-start gap-3">
+              <span className="panel-tag mt-0.5">sys</span>
+              <div>
+                <p className="text-sm font-medium text-txt-1">Server Info</p>
+                <p className="text-xs text-txt-3">Real hostname, CPU, memory, and uptime from the Hetzner VPS in Virginia</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Live panels preview */}
+        <div className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <VisitorStats />
             <ActivityFeed />
@@ -280,16 +361,6 @@ export default function DemoPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <SystemInfo />
             <ContainerStatus />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="card p-4">
-              <div className="panel-header mb-2">
-                <span className="panel-tag">stdout</span>
-                <h4 className="panel-title">Live Logs</h4>
-              </div>
-              <p className="text-2xs text-txt-3">Available after starting demo</p>
-            </div>
-            <StorageBrowser active={false} />
           </div>
         </div>
       </div>
@@ -305,7 +376,8 @@ export default function DemoPage() {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        <p className="text-sm text-txt-2">Connecting to training workers...</p>
+        <p className="text-base text-txt-1 font-medium">Connecting to training workers...</p>
+        <p className="text-sm text-txt-3">Looking for an active training run on the server</p>
       </div>
     );
   }
@@ -324,31 +396,37 @@ export default function DemoPage() {
 
             {/* Status Banner */}
             <div className={`glass-strong border-l-2 ${borderClass} overflow-hidden`}>
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full animate-pulse ${stateConfig.dot}`} />
-                  <div>
-                    <h3 className="text-base font-semibold text-txt-1">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full animate-pulse ${stateConfig.dot}`} />
+                    <h3 className="text-lg font-bold text-txt-1">
                       {STATUS_HEADLINE[run.state] ?? run.state}
                     </h3>
-                    <p className="text-2xs text-txt-3 font-mono">
-                      Run {shortId(run.run_id, 8)} &middot; Step {run.current_step}
-                    </p>
                   </div>
+                  <RunBadge state={run.state} size="md" />
                 </div>
-                <RunBadge state={run.state} size="md" />
+                {STATUS_EXPLAIN[run.state] && (
+                  <p className="text-sm text-txt-2 ml-6">
+                    {STATUS_EXPLAIN[run.state]}
+                  </p>
+                )}
+                <p className="text-2xs text-txt-3 font-mono mt-2 ml-6">
+                  Run {shortId(run.run_id, 8)} &middot; Step {run.current_step}
+                </p>
               </div>
             </div>
 
             {/* Recovery Success Banner */}
             {recoveryBanner && (
-              <div className="glass-strong border border-ok/30 bg-ok-muted p-4">
+              <div className="glass-strong border border-ok/30 bg-ok-muted p-5">
                 <div className="flex items-center gap-3">
                   <LiveDot />
                   <div>
-                    <p className="text-ok text-sm font-semibold">Recovery Successful</p>
-                    <p className="text-txt-3 text-2xs">
-                      Training resumed from last checkpoint. No data was lost.
+                    <p className="text-ok text-base font-bold">Recovery Successful!</p>
+                    <p className="text-txt-2 text-sm mt-1">
+                      The crashed worker restarted, loaded the last checkpoint, and resumed training.
+                      No data was lost — this is what the system is designed to do.
                     </p>
                   </div>
                 </div>
@@ -357,20 +435,26 @@ export default function DemoPage() {
 
             {/* Metric Cards */}
             <div className="grid grid-cols-4 gap-3">
-              <MetricCard label="Training Step" value={run.current_step} hint="How far along the AI model is in learning" />
-              <MetricCard label="Checkpoints" value={committedCheckpoints.length} hint="Save points so progress isn't lost" />
-              <MetricCard label="Data Saved" value={formatBytes(totalBytes)} hint="The AI's brain backed up to storage" />
+              <MetricCard label="Training Step" value={run.current_step} hint="How far along training is" />
+              <MetricCard label="Checkpoints" value={committedCheckpoints.length} hint="Auto-saved progress points" />
+              <MetricCard label="Data Saved" value={formatBytes(totalBytes)} hint="Total model state backed up" />
               <MetricCard
                 label="Active Workers"
                 value={`${workers.filter(w => w.status === 'ACTIVE').length}/2`}
-                hint="Computers working together on training"
+                hint="Servers currently training"
               />
             </div>
 
             {/* Workers + Kill Buttons */}
-            <div className="card p-4">
-              <h3 className="panel-title mb-3">Training Workers</h3>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="card p-5">
+              <div className="mb-4">
+                <h3 className="text-base font-bold text-txt-1">Training Workers</h3>
+                <p className="text-xs text-txt-3 mt-1">
+                  Each worker is a real Docker container running PyTorch.{' '}
+                  <span className="text-err font-medium">Click "Kill" to shut one down</span> — the system will detect the failure and recover.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {['ckpt-worker-0', 'ckpt-worker-1'].map((container, idx) => {
                   const worker = relevantWorkers[idx];
                   const isAlive = worker?.status === 'ACTIVE';
@@ -379,31 +463,44 @@ export default function DemoPage() {
                   return (
                     <div
                       key={container}
-                      className="card px-3 py-3"
+                      className="card px-4 py-4"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2.5">
-                          <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                          <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
                           <div>
-                            <p className="text-sm font-medium text-txt-1">Worker {idx}</p>
+                            <p className="text-sm font-semibold text-txt-1">Worker {idx}</p>
                             <p className="text-2xs text-txt-3 font-mono">{container}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {worker && (
-                            <span className="text-2xs text-txt-3 font-mono">
-                              Step {worker.current_step}
-                            </span>
-                          )}
-                          <button
-                            onClick={() => handleKillWorker(container)}
-                            disabled={killing !== null || !isAlive}
-                            className="btn-danger px-2.5 py-1 text-2xs cursor-pointer"
-                          >
-                            {killing === container ? 'Killing...' : 'Kill'}
-                          </button>
-                        </div>
+                        {worker && (
+                          <span className="text-xs text-txt-3 font-mono">
+                            Step {worker.current_step}
+                          </span>
+                        )}
                       </div>
+                      <button
+                        onClick={() => handleKillWorker(container)}
+                        disabled={killing !== null || !isAlive}
+                        className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                          isAlive && killing === null
+                            ? 'bg-err-muted text-err hover:bg-err/20 border border-err/20'
+                            : 'bg-surface-3 text-txt-3 border border-line cursor-not-allowed'
+                        }`}
+                      >
+                        {killing === container ? (
+                          'Killing...'
+                        ) : !isAlive ? (
+                          'Offline — Recovering...'
+                        ) : (
+                          <>Kill This Server</>
+                        )}
+                      </button>
+                      {isAlive && killing === null && (
+                        <p className="text-2xs text-txt-3 text-center mt-2">
+                          Sends <code className="bg-surface-3 px-1 rounded font-mono">docker kill</code> to the real container
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -412,9 +509,12 @@ export default function DemoPage() {
 
             {/* Event Timeline */}
             <div className="card p-4">
-              <h3 className="panel-title mb-3">Event Timeline</h3>
+              <div className="mb-3">
+                <h3 className="text-base font-bold text-txt-1">Event Timeline</h3>
+                <p className="text-xs text-txt-3 mt-0.5">Every state change and checkpoint is logged here in real-time</p>
+              </div>
               {timeline.length === 0 ? (
-                <p className="text-2xs text-txt-3">Events will appear here as they happen...</p>
+                <p className="text-xs text-txt-3">Events will appear here as they happen...</p>
               ) : (
                 <div className="space-y-1.5 max-h-56 overflow-y-auto">
                   {timeline.map((event, i) => (
@@ -435,7 +535,12 @@ export default function DemoPage() {
             {/* Checkpoint History */}
             {committedCheckpoints.length > 0 && (
               <div className="card p-4">
-                <h3 className="panel-title mb-3">Checkpoint History</h3>
+                <div className="mb-3">
+                  <h3 className="text-base font-bold text-txt-1">Checkpoint History</h3>
+                  <p className="text-xs text-txt-3 mt-0.5">
+                    Each row is a save point — the AI model's state backed up to S3 storage
+                  </p>
+                </div>
                 <div className="space-y-1.5">
                   {committedCheckpoints.slice(-8).reverse().map(cp => (
                     <div
@@ -460,6 +565,12 @@ export default function DemoPage() {
 
           {/* ─── Right Column: Proof Panels ─── */}
           <div className="w-[380px] flex-shrink-0 space-y-3">
+            <div className="card px-4 py-3">
+              <p className="text-xs font-semibold text-txt-1 mb-1">Proof Panels</p>
+              <p className="text-2xs text-txt-3 leading-relaxed">
+                Everything below is live data from the real server — not animations or mock data.
+              </p>
+            </div>
             <VisitorStats />
             <ActivityFeed />
             <SystemInfo />
