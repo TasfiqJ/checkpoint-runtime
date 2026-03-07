@@ -1,28 +1,28 @@
 const STEPS = [
   {
-    title: 'Training is Running',
+    title: 'Training Has Started',
     description:
-      'Two PyTorch workers are training a neural network. Watch the step counter increase and loss values decrease in the Live Logs panel.',
+      'Two computers are teaching an AI model together. Watch the step counter climb in the metrics above -- each step means the model is learning a little more.',
   },
   {
-    title: 'Checkpoints are Saving',
+    title: 'Save Points Are Being Created',
     description:
-      'Every 50 steps, model weights (real tensor bytes) stream through gRPC to the Rust data plane, then to MinIO. See new .bin files appearing in the Storage panel.',
+      'Every 50 steps, the system saves a snapshot of everything the AI has learned -- like a save point in a video game. Check the Storage panel to see new files appearing.',
   },
   {
-    title: 'Kill a Worker',
+    title: 'Crash a Computer',
     description:
-      'Click the red Kill button on any worker. This runs docker kill on the actual container. Watch the Infrastructure panel — the process dies.',
+      'Click the red "Kill" button on any worker to shut down one of the training computers on purpose. This is a real crash -- not a simulation.',
   },
   {
-    title: 'Failure Detected',
+    title: 'The System Noticed Something Went Wrong',
     description:
-      'The control plane detects the missed heartbeat. Watch the state change to FAILED in the Event Timeline. See "heartbeat timeout" in the Live Logs.',
+      'The system detected that a computer stopped sending heartbeats. Watch the state change to FAILED in the Event Timeline, and look for "heartbeat timeout" in the Live Logs.',
   },
   {
-    title: 'Recovery Complete',
+    title: 'Everything Recovered Automatically',
     description:
-      'The worker auto-restarts, loads the last checkpoint from MinIO, and resumes training. The step counter continues from the checkpoint — not from zero.',
+      'The crashed computer restarted, loaded the last save point from storage, and picked up training right where it left off. No work was lost!',
   },
 ];
 
@@ -35,10 +35,10 @@ export default function DemoWalkthrough({ currentStep }: Props) {
   const num = Math.min(currentStep, STEPS.length - 1);
 
   return (
-    <div className="card-elevated p-4">
+    <div className="glass-strong p-4">
       {/* Progress bar */}
       <div className="flex items-center gap-3 mb-3">
-        <span className="text-2xs font-semibold text-text-tertiary uppercase tracking-wider">
+        <span className="text-2xs font-semibold text-txt-3 uppercase tracking-wider">
           Step {num + 1}/{STEPS.length}
         </span>
         <div className="flex gap-1">
@@ -46,7 +46,7 @@ export default function DemoWalkthrough({ currentStep }: Props) {
             <div
               key={i}
               className={`h-1 rounded-full transition-all duration-300 ${
-                i <= num ? 'w-6 bg-accent' : 'w-2 bg-surface-3'
+                i <= num ? 'w-6 bg-brand-violet' : 'w-2 bg-surface-3'
               }`}
             />
           ))}
@@ -54,8 +54,8 @@ export default function DemoWalkthrough({ currentStep }: Props) {
       </div>
 
       {/* Current step */}
-      <h4 className="text-sm font-semibold text-text-primary mb-1">{step.title}</h4>
-      <p className="text-xs text-text-secondary leading-relaxed">{step.description}</p>
+      <h4 className="text-sm font-semibold text-txt-1 mb-1">{step.title}</h4>
+      <p className="text-xs text-txt-2 leading-relaxed">{step.description}</p>
     </div>
   );
 }

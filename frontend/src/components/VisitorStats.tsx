@@ -66,8 +66,8 @@ export default function VisitorStats() {
         <span className="panel-tag">live</span>
         <h4 className="panel-title">Watching Now</h4>
         <span className="ml-auto flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-state-running animate-pulse" />
-          <span className="text-sm font-mono font-semibold text-text-primary">
+          <span className="w-1.5 h-1.5 rounded-full bg-ok animate-pulse" />
+          <span className="text-sm font-mono font-semibold text-txt-1">
             {data.total_visitors}
           </span>
         </span>
@@ -78,12 +78,12 @@ export default function VisitorStats() {
           {data.countries.map((c) => (
             <span
               key={c.country_code}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-surface-3 rounded text-[11px] text-text-secondary"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-surface-3 rounded text-[11px] text-txt-2"
               title={`${c.country}: ${c.count}`}
             >
               <span className="text-sm">{c.flag}</span>
               {c.count > 1 && (
-                <span className="text-2xs text-text-tertiary">{c.count}</span>
+                <span className="text-2xs text-txt-3">{c.count}</span>
               )}
             </span>
           ))}

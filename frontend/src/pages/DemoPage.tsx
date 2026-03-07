@@ -20,10 +20,10 @@ interface TimelineEvent {
 }
 
 const EVENT_COLORS = {
-  info: 'border-l-state-committed bg-state-committed-muted text-state-committed',
-  success: 'border-l-state-running bg-state-running-muted text-state-running',
-  warning: 'border-l-state-checkpoint bg-state-checkpoint-muted text-state-checkpoint',
-  error: 'border-l-state-failed bg-state-failed-muted text-state-failed',
+  info: 'border-l-info bg-info-muted text-info',
+  success: 'border-l-ok bg-ok-muted text-ok',
+  warning: 'border-l-warn bg-warn-muted text-warn',
+  error: 'border-l-err bg-err-muted text-err',
 };
 
 const STATUS_HEADLINE: Partial<Record<RunState, string>> = {
@@ -37,11 +37,11 @@ const STATUS_HEADLINE: Partial<Record<RunState, string>> = {
 // ── State-specific left border class ────────────────────────────────────────
 
 const STATE_BORDER: Partial<Record<RunState, string>> = {
-  RUNNING: 'border-l-state-running',
-  FAILED: 'border-l-state-failed',
-  RECOVERING: 'border-l-state-recovery',
-  CHECKPOINTING: 'border-l-state-checkpoint',
-  COMMITTED: 'border-l-state-committed',
+  RUNNING: 'border-l-ok',
+  FAILED: 'border-l-err',
+  RECOVERING: 'border-l-recover',
+  CHECKPOINTING: 'border-l-warn',
+  COMMITTED: 'border-l-info',
 };
 
 // ── Main DemoPage ───────────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ export default function DemoPage() {
     .slice(0, 2);
 
   const stateConfig = run ? (RUN_STATE_CONFIG[run.state] ?? RUN_STATE_CONFIG.CREATED) : RUN_STATE_CONFIG.CREATED;
-  const borderClass = run ? (STATE_BORDER[run.state] ?? 'border-l-border') : 'border-l-border';
+  const borderClass = run ? (STATE_BORDER[run.state] ?? 'border-l-line') : 'border-l-line';
 
   // ── Pre-start hero ──────────────────────────────────────────────────────────
 
@@ -220,17 +220,18 @@ export default function DemoPage() {
       <div className="max-w-4xl mx-auto py-12 space-y-10">
         {/* Hero */}
         <div className="text-center space-y-5">
-          <h1 className="text-3xl font-bold text-text-primary tracking-tight">
-            Fault-Tolerant Distributed Checkpointing
+          <h1 className="text-3xl font-bold text-txt-1 tracking-tight">
+            Watch AI Training Survive a Crash
           </h1>
-          <p className="text-text-secondary text-sm max-w-xl mx-auto leading-relaxed">
-            Watch a production-grade checkpoint runtime save ML training state to a distributed
-            data plane. Kill a worker and see automatic recovery from the last committed checkpoint.
+          <p className="text-txt-2 text-sm max-w-xl mx-auto leading-relaxed">
+            This demo runs a real AI training job across multiple computers. You get to crash one on purpose
+            and watch the system recover automatically -- no progress lost. Everything you see is live infrastructure,
+            not a simulation.
           </p>
           <button
             onClick={handleStart}
             disabled={starting}
-            className="btn-primary px-8 py-3.5 text-base"
+            className="btn-primary px-8 py-3.5 text-base cursor-pointer"
           >
             Start Demo
           </button>
@@ -239,37 +240,37 @@ export default function DemoPage() {
         {/* 3-step instruction cards */}
         <div className="grid grid-cols-3 gap-4">
           <div className="card p-5 space-y-3">
-            <div className="w-8 h-8 rounded-lg bg-state-running-muted flex items-center justify-center text-state-running font-mono font-bold text-sm">
+            <div className="w-8 h-8 rounded-lg bg-ok-muted flex items-center justify-center text-ok font-mono font-bold text-sm">
               1
             </div>
-            <p className="text-sm font-medium text-text-primary">Start Demo</p>
-            <p className="text-2xs text-text-tertiary leading-relaxed">
-              Workers begin training and periodically save checkpoints through the data plane to S3.
+            <p className="text-sm font-medium text-txt-1">Launch Training</p>
+            <p className="text-2xs text-txt-3 leading-relaxed">
+              Two computers start teaching an AI model together, automatically saving their progress along the way.
             </p>
           </div>
           <div className="card p-5 space-y-3">
-            <div className="w-8 h-8 rounded-lg bg-state-failed-muted flex items-center justify-center text-state-failed font-mono font-bold text-sm">
+            <div className="w-8 h-8 rounded-lg bg-err-muted flex items-center justify-center text-err font-mono font-bold text-sm">
               2
             </div>
-            <p className="text-sm font-medium text-text-primary">Kill a Worker</p>
-            <p className="text-2xs text-text-tertiary leading-relaxed">
-              Click "Kill" to simulate a node failure. The control plane detects the missed heartbeats.
+            <p className="text-sm font-medium text-txt-1">Crash a Computer</p>
+            <p className="text-2xs text-txt-3 leading-relaxed">
+              Click "Kill" to pull the plug on one of the training computers. The system will notice something is wrong.
             </p>
           </div>
           <div className="card p-5 space-y-3">
-            <div className="w-8 h-8 rounded-lg bg-state-committed-muted flex items-center justify-center text-state-committed font-mono font-bold text-sm">
+            <div className="w-8 h-8 rounded-lg bg-info-muted flex items-center justify-center text-info font-mono font-bold text-sm">
               3
             </div>
-            <p className="text-sm font-medium text-text-primary">Watch Recovery</p>
-            <p className="text-2xs text-text-tertiary leading-relaxed">
-              The worker automatically restarts, loads the last checkpoint from S3, and resumes training.
+            <p className="text-sm font-medium text-txt-1">Watch It Recover</p>
+            <p className="text-2xs text-txt-3 leading-relaxed">
+              The crashed computer restarts, reloads its last save point from storage, and picks up right where it left off.
             </p>
           </div>
         </div>
 
         {/* Proof panels grid */}
         <div className="space-y-3">
-          <p className="text-2xs text-text-tertiary text-center uppercase tracking-widest">
+          <p className="text-2xs text-txt-3 text-center uppercase tracking-widest">
             Live infrastructure &mdash; not a simulation
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -286,7 +287,7 @@ export default function DemoPage() {
                 <span className="panel-tag">stdout</span>
                 <h4 className="panel-title">Live Logs</h4>
               </div>
-              <p className="text-2xs text-text-tertiary">Available after starting demo</p>
+              <p className="text-2xs text-txt-3">Available after starting demo</p>
             </div>
             <StorageBrowser active={false} />
           </div>
@@ -300,11 +301,11 @@ export default function DemoPage() {
   if (!runId && starting) {
     return (
       <div className="flex flex-col items-center justify-center py-24 space-y-4">
-        <svg className="animate-spin h-6 w-6 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg className="animate-spin h-6 w-6 text-brand-violet" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        <p className="text-sm text-text-secondary">Connecting to training workers...</p>
+        <p className="text-sm text-txt-2">Connecting to training workers...</p>
       </div>
     );
   }
@@ -322,15 +323,15 @@ export default function DemoPage() {
           <div className="flex-1 min-w-0 space-y-4">
 
             {/* Status Banner */}
-            <div className={`card-elevated border-l-2 ${borderClass} overflow-hidden`}>
+            <div className={`glass-strong border-l-2 ${borderClass} overflow-hidden`}>
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full animate-pulse ${stateConfig.dot}`} />
                   <div>
-                    <h3 className="text-base font-semibold text-text-primary">
+                    <h3 className="text-base font-semibold text-txt-1">
                       {STATUS_HEADLINE[run.state] ?? run.state}
                     </h3>
-                    <p className="text-2xs text-text-tertiary font-mono">
+                    <p className="text-2xs text-txt-3 font-mono">
                       Run {shortId(run.run_id, 8)} &middot; Step {run.current_step}
                     </p>
                   </div>
@@ -341,12 +342,12 @@ export default function DemoPage() {
 
             {/* Recovery Success Banner */}
             {recoveryBanner && (
-              <div className="card-elevated border border-state-running/30 bg-state-running-muted p-4">
+              <div className="glass-strong border border-ok/30 bg-ok-muted p-4">
                 <div className="flex items-center gap-3">
                   <LiveDot />
                   <div>
-                    <p className="text-state-running text-sm font-semibold">Recovery Successful</p>
-                    <p className="text-text-tertiary text-2xs">
+                    <p className="text-ok text-sm font-semibold">Recovery Successful</p>
+                    <p className="text-txt-3 text-2xs">
                       Training resumed from last checkpoint. No data was lost.
                     </p>
                   </div>
@@ -356,12 +357,13 @@ export default function DemoPage() {
 
             {/* Metric Cards */}
             <div className="grid grid-cols-4 gap-3">
-              <MetricCard label="Training Step" value={run.current_step} />
-              <MetricCard label="Checkpoints" value={committedCheckpoints.length} />
-              <MetricCard label="Data Saved" value={formatBytes(totalBytes)} />
+              <MetricCard label="Training Step" value={run.current_step} hint="How far along the AI model is in learning" />
+              <MetricCard label="Checkpoints" value={committedCheckpoints.length} hint="Save points so progress isn't lost" />
+              <MetricCard label="Data Saved" value={formatBytes(totalBytes)} hint="The AI's brain backed up to storage" />
               <MetricCard
                 label="Active Workers"
                 value={`${workers.filter(w => w.status === 'ACTIVE').length}/2`}
+                hint="Computers working together on training"
               />
             </div>
 
@@ -372,7 +374,7 @@ export default function DemoPage() {
                 {['ckpt-worker-0', 'ckpt-worker-1'].map((container, idx) => {
                   const worker = relevantWorkers[idx];
                   const isAlive = worker?.status === 'ACTIVE';
-                  const dotColor = WORKER_DOT[worker?.status ?? 'DEAD'] ?? 'bg-state-neutral';
+                  const dotColor = WORKER_DOT[worker?.status ?? 'DEAD'] ?? 'bg-muted';
 
                   return (
                     <div
@@ -383,20 +385,20 @@ export default function DemoPage() {
                         <div className="flex items-center gap-2.5">
                           <span className={`w-2 h-2 rounded-full ${dotColor}`} />
                           <div>
-                            <p className="text-sm font-medium text-text-primary">Worker {idx}</p>
-                            <p className="text-2xs text-text-tertiary font-mono">{container}</p>
+                            <p className="text-sm font-medium text-txt-1">Worker {idx}</p>
+                            <p className="text-2xs text-txt-3 font-mono">{container}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
                           {worker && (
-                            <span className="text-2xs text-text-tertiary font-mono">
+                            <span className="text-2xs text-txt-3 font-mono">
                               Step {worker.current_step}
                             </span>
                           )}
                           <button
                             onClick={() => handleKillWorker(container)}
                             disabled={killing !== null || !isAlive}
-                            className="btn-danger px-2.5 py-1 text-2xs"
+                            className="btn-danger px-2.5 py-1 text-2xs cursor-pointer"
                           >
                             {killing === container ? 'Killing...' : 'Kill'}
                           </button>
@@ -412,7 +414,7 @@ export default function DemoPage() {
             <div className="card p-4">
               <h3 className="panel-title mb-3">Event Timeline</h3>
               {timeline.length === 0 ? (
-                <p className="text-2xs text-text-tertiary">Events will appear here as they happen...</p>
+                <p className="text-2xs text-txt-3">Events will appear here as they happen...</p>
               ) : (
                 <div className="space-y-1.5 max-h-56 overflow-y-auto">
                   {timeline.map((event, i) => (
@@ -420,7 +422,7 @@ export default function DemoPage() {
                       key={i}
                       className={`flex items-start gap-2 px-2.5 py-1.5 rounded-md border-l-2 ${EVENT_COLORS[event.type]}`}
                     >
-                      <span className="text-2xs font-mono text-text-tertiary whitespace-nowrap mt-0.5">
+                      <span className="text-2xs font-mono text-txt-3 whitespace-nowrap mt-0.5">
                         +{(event.time / 1000).toFixed(1)}s
                       </span>
                       <span className="text-xs">{event.label}</span>
@@ -441,10 +443,10 @@ export default function DemoPage() {
                       className="flex items-center justify-between px-2.5 py-1.5 bg-surface-2 rounded-md"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-state-committed" />
-                        <span className="text-xs text-text-secondary">Step {cp.step}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-info" />
+                        <span className="text-xs text-txt-2">Step {cp.step}</span>
                       </div>
-                      <div className="flex items-center gap-3 text-2xs text-text-tertiary">
+                      <div className="flex items-center gap-3 text-2xs text-txt-3">
                         <span>{cp.num_shards} shard{cp.num_shards !== 1 ? 's' : ''}</span>
                         <span>{formatBytes(cp.total_bytes)}</span>
                         <span className="font-mono">{shortId(cp.checkpoint_id, 8)}</span>

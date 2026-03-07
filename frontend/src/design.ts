@@ -2,32 +2,29 @@ import type { RunState, CheckpointState } from './types';
 
 // ── State styling maps (single source of truth) ─────────────────────────────
 
-export const RUN_STATE_CONFIG: Record<RunState, { bg: string; text: string; dot: string; label: string }> = {
-  CREATED:       { bg: 'bg-state-neutral-muted', text: 'text-state-neutral',    dot: 'bg-state-neutral',    label: 'Created' },
-  RUNNING:       { bg: 'bg-state-running-muted',  text: 'text-state-running',   dot: 'bg-state-running',    label: 'Running' },
-  CHECKPOINTING: { bg: 'bg-state-checkpoint-muted', text: 'text-state-checkpoint', dot: 'bg-state-checkpoint', label: 'Checkpointing' },
-  COMMITTED:     { bg: 'bg-state-committed-muted', text: 'text-state-committed', dot: 'bg-state-committed', label: 'Committed' },
-  FAILED:        { bg: 'bg-state-failed-muted',  text: 'text-state-failed',     dot: 'bg-state-failed',     label: 'Failed' },
-  RECOVERING:    { bg: 'bg-state-recovery-muted', text: 'text-state-recovery',  dot: 'bg-state-recovery',   label: 'Recovering' },
-  CANCELLED:     { bg: 'bg-state-neutral-muted', text: 'text-state-neutral',    dot: 'bg-state-neutral',    label: 'Cancelled' },
-  COMPLETED:     { bg: 'bg-state-committed-muted', text: 'text-state-committed', dot: 'bg-state-committed', label: 'Completed' },
+export const RUN_STATE_CONFIG: Record<RunState, { bg: string; text: string; dot: string; label: string; desc: string }> = {
+  CREATED:       { bg: 'bg-muted-bg',     text: 'text-muted',     dot: 'bg-muted',     label: 'Created',       desc: 'Waiting to start' },
+  RUNNING:       { bg: 'bg-ok-muted',     text: 'text-ok',        dot: 'bg-ok',        label: 'Running',       desc: 'Training in progress' },
+  CHECKPOINTING: { bg: 'bg-warn-muted',   text: 'text-warn',      dot: 'bg-warn',      label: 'Saving',        desc: 'Saving a checkpoint' },
+  COMMITTED:     { bg: 'bg-info-muted',   text: 'text-info',      dot: 'bg-info',      label: 'Saved',         desc: 'Checkpoint saved successfully' },
+  FAILED:        { bg: 'bg-err-muted',    text: 'text-err',       dot: 'bg-err',       label: 'Failed',        desc: 'A worker crashed' },
+  RECOVERING:    { bg: 'bg-recover-muted', text: 'text-recover',  dot: 'bg-recover',   label: 'Recovering',    desc: 'Loading last save...' },
+  CANCELLED:     { bg: 'bg-muted-bg',     text: 'text-muted',     dot: 'bg-muted',     label: 'Cancelled',     desc: 'Stopped by user' },
+  COMPLETED:     { bg: 'bg-info-muted',   text: 'text-info',      dot: 'bg-info',      label: 'Done',          desc: 'Training finished' },
 };
 
 export const CKPT_STATE_CONFIG: Record<CheckpointState, { bg: string; text: string }> = {
-  PENDING:     { bg: 'bg-state-neutral-muted',    text: 'text-state-neutral' },
-  IN_PROGRESS: { bg: 'bg-state-checkpoint-muted', text: 'text-state-checkpoint' },
-  COMMITTED:   { bg: 'bg-state-running-muted',    text: 'text-state-running' },
-  FAILED:      { bg: 'bg-state-failed-muted',     text: 'text-state-failed' },
+  PENDING:     { bg: 'bg-muted-bg',   text: 'text-muted' },
+  IN_PROGRESS: { bg: 'bg-warn-muted', text: 'text-warn' },
+  COMMITTED:   { bg: 'bg-ok-muted',   text: 'text-ok' },
+  FAILED:      { bg: 'bg-err-muted',  text: 'text-err' },
 };
 
 export const WORKER_DOT: Record<string, string> = {
-  ACTIVE:   'bg-state-running',
-  active:   'bg-state-running',
-  DEAD:     'bg-state-failed',
-  dead:     'bg-state-failed',
-  DRAINING: 'bg-state-checkpoint',
-  IDLE:     'bg-state-neutral',
-  idle:     'bg-state-neutral',
+  ACTIVE: 'bg-ok', active: 'bg-ok',
+  DEAD: 'bg-err', dead: 'bg-err',
+  DRAINING: 'bg-warn',
+  IDLE: 'bg-muted', idle: 'bg-muted',
 };
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -42,27 +39,14 @@ export function formatBytes(bytes: number): string {
 
 export function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
+    return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
 }
 
 export function formatTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleTimeString(undefined, {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
+    return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch { return iso; }
 }
 
 export function formatUptime(seconds: number): string {

@@ -47,19 +47,19 @@ export default function ActivityFeed() {
 
       <div className="max-h-48 overflow-y-auto">
         {items.length === 0 ? (
-          <div className="px-3 py-4 text-xs text-text-tertiary text-center">
+          <div className="px-3 py-4 text-xs text-txt-3 text-center">
             No activity yet...
           </div>
         ) : (
-          <div className="divide-y divide-border-subtle">
+          <div className="divide-y divide-line-subtle">
             {items.slice(0, 15).map((item, i) => (
               <div
                 key={`${item.timestamp}-${i}`}
                 className="flex items-start gap-2 px-3.5 py-2 text-[11px]"
               >
                 <span className="text-sm flex-shrink-0 mt-px">{item.flag}</span>
-                <span className="text-text-secondary flex-1">{item.message}</span>
-                <span className="text-2xs text-text-tertiary flex-shrink-0 whitespace-nowrap">
+                <span className="text-txt-2 flex-1">{item.message}</span>
+                <span className="text-2xs text-txt-3 flex-shrink-0 whitespace-nowrap">
                   {timeAgo(item.timestamp)}
                 </span>
               </div>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,86 +6,104 @@
 
 @layer base {
   body {
-    @apply bg-surface-0 text-text-primary antialiased;
+    @apply bg-surface-0 text-txt-1 antialiased;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
   ::selection {
-    @apply bg-accent/30 text-white;
+    @apply bg-brand-violet/30 text-white;
   }
 
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    @apply w-1.5;
-  }
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-border-emphasis rounded-full;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-text-tertiary;
-  }
+  ::-webkit-scrollbar { @apply w-1.5; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-surface-4 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-txt-3; }
 }
 
 @layer components {
-  /* Card component */
-  .card {
-    @apply bg-surface-1 border border-border rounded-xl;
+  /* ── Glass card ─────────────────────────────── */
+  .glass {
+    @apply bg-surface-1/80 backdrop-blur-xl border border-line rounded-2xl;
   }
-  .card-elevated {
-    @apply bg-surface-2 border border-border-emphasis rounded-xl;
+  .glass-strong {
+    @apply bg-surface-2/90 backdrop-blur-xl border border-line-emphasis rounded-2xl shadow-glass;
   }
 
-  /* Panel header pattern used in proof panels */
+  /* ── Standard card ──────────────────────────── */
+  .card {
+    @apply bg-surface-1 border border-line rounded-2xl transition-all duration-200;
+  }
+  .card:hover {
+    @apply border-line-emphasis;
+  }
+
+  /* ── Panel header (proof panels) ────────────── */
   .panel-header {
-    @apply px-3.5 py-2.5 border-b border-border flex items-center gap-2;
+    @apply px-4 py-3 border-b border-line flex items-center gap-2.5;
   }
   .panel-tag {
-    @apply text-2xs font-mono font-medium bg-surface-3 text-text-tertiary px-1.5 py-0.5 rounded;
+    @apply text-2xs font-mono font-medium bg-surface-3 text-txt-3 px-2 py-0.5 rounded-md;
   }
   .panel-title {
-    @apply text-xs font-semibold text-text-secondary uppercase tracking-wider;
+    @apply text-xs font-semibold text-txt-2 tracking-wide;
   }
 
-  /* Page header */
-  .page-header {
-    @apply text-2xl font-semibold text-text-primary tracking-tight;
-  }
-  .page-subtitle {
-    @apply text-sm text-text-secondary mt-1;
+  /* ── Helper text — friendly explanations ────── */
+  .helper {
+    @apply text-2xs text-txt-3 leading-relaxed mt-1;
   }
 
-  /* Metric card */
+  /* ── Metric card ────────────────────────────── */
   .metric-label {
-    @apply text-2xs font-medium text-text-tertiary uppercase tracking-wider;
+    @apply text-2xs font-medium text-txt-3 tracking-wide;
   }
   .metric-value {
-    @apply text-xl font-semibold font-mono text-text-primary mt-1;
+    @apply text-xl font-bold font-mono text-txt-1 mt-1;
   }
 
-  /* Table */
+  /* ── Table ──────────────────────────────────── */
   .table-header {
-    @apply px-4 py-2.5 text-left text-2xs font-semibold text-text-tertiary uppercase tracking-wider;
+    @apply px-4 py-2.5 text-left text-2xs font-semibold text-txt-3 uppercase tracking-wider;
   }
   .table-cell {
     @apply px-4 py-3 whitespace-nowrap text-sm;
   }
 
-  /* Badge base */
+  /* ── Badge ──────────────────────────────────── */
   .badge {
-    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium tracking-wide;
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-2xs font-semibold tracking-wide;
   }
 
-  /* Button variants */
+  /* ── Buttons ────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-200 cursor-pointer;
+  }
   .btn-primary {
-    @apply px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-lg transition-colors duration-150;
+    @apply btn px-5 py-2.5 text-sm text-white bg-gradient-to-r from-brand-blue to-brand-violet hover:shadow-glow hover:scale-[1.02] active:scale-[0.98];
+  }
+  .btn-secondary {
+    @apply btn px-5 py-2.5 text-sm text-txt-1 bg-surface-3 hover:bg-surface-4;
   }
   .btn-ghost {
-    @apply px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-3 rounded-lg transition-colors duration-150;
+    @apply btn px-4 py-2 text-sm text-txt-2 hover:text-txt-1 hover:bg-surface-3 rounded-xl;
   }
   .btn-danger {
-    @apply px-3 py-1.5 bg-state-failed-muted text-state-failed text-xs font-medium rounded-lg hover:bg-state-failed/20 transition-colors duration-150;
+    @apply btn px-3 py-1.5 text-xs text-err bg-err-muted hover:bg-err/20 rounded-xl;
+  }
+  .btn-success {
+    @apply btn px-3 py-1.5 text-xs text-ok bg-ok-muted hover:bg-ok/20 rounded-xl;
+  }
+
+  /* ── Gradient text ──────────────────────────── */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-blue via-brand-violet to-brand-pink;
+  }
+
+  /* ── Page layout ────────────────────────────── */
+  .page-header {
+    @apply text-2xl font-bold text-txt-1 tracking-tight;
+  }
+  .page-subtitle {
+    @apply text-sm text-txt-2 mt-1.5 leading-relaxed;
   }
 }

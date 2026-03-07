@@ -59,7 +59,7 @@ export default function StorageBrowser({ active }: { active: boolean }) {
         <span className="panel-tag">s3://</span>
         <h4 className="panel-title">Object Storage</h4>
         {data && (
-          <span className="ml-auto text-2xs text-text-tertiary">
+          <span className="ml-auto text-2xs text-txt-3">
             {files.length} files &middot; {formatBytes(data.total_bytes)}
           </span>
         )}
@@ -67,20 +67,20 @@ export default function StorageBrowser({ active }: { active: boolean }) {
 
       <div className="font-mono text-[11px] max-h-72 overflow-y-auto p-2.5">
         {files.length === 0 ? (
-          <div className="text-text-tertiary text-center py-6">
+          <div className="text-txt-3 text-center py-6">
             No checkpoint files yet...
           </div>
         ) : (
           <div className="space-y-0.5">
             {Array.from(tree.entries()).map(([runId, checkpoints]) => (
               <div key={runId}>
-                <div className="text-state-committed flex items-center gap-1">
-                  <span className="text-text-tertiary">checkpoints/</span>
+                <div className="text-info flex items-center gap-1">
+                  <span className="text-txt-3">checkpoints/</span>
                   {runId.slice(0, 12)}/
                 </div>
                 {Array.from(checkpoints.entries()).map(([cpId, cpFiles]) => (
                   <div key={cpId} className="ml-4">
-                    <div className="text-accent">
+                    <div className="text-brand-violet">
                       {cpId.slice(0, 12)}/
                     </div>
                     {cpFiles.map((f) => {
@@ -92,25 +92,25 @@ export default function StorageBrowser({ active }: { active: boolean }) {
                             {isManifest ? (
                               <button
                                 onClick={() => handleManifestClick(f.key)}
-                                className="text-state-checkpoint hover:text-state-checkpoint/80 hover:underline cursor-pointer"
+                                className="text-warn hover:text-warn/80 hover:underline cursor-pointer"
                               >
                                 {fileName}
                               </button>
                             ) : (
                               <span className={
                                 fileName.endsWith('.bin')
-                                  ? 'text-state-running'
-                                  : 'text-text-tertiary'
+                                  ? 'text-ok'
+                                  : 'text-txt-3'
                               }>
                                 {fileName}
                               </span>
                             )}
-                            <span className="text-text-tertiary/60">
+                            <span className="text-txt-3/60">
                               ({formatBytes(f.size)})
                             </span>
                           </div>
                           {isManifest && expandedManifest === f.key && manifestContent && (
-                            <pre className="ml-2 mt-1 mb-2 p-2 bg-surface-0 border border-border rounded text-[10px] text-text-tertiary overflow-x-auto max-w-full">
+                            <pre className="ml-2 mt-1 mb-2 p-2 bg-surface-0 border border-line rounded text-[10px] text-txt-3 overflow-x-auto max-w-full">
                               {JSON.stringify(manifestContent, null, 2)}
                             </pre>
                           )}

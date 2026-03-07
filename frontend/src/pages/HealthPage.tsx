@@ -4,24 +4,24 @@ import { API_BASE } from '../config/api';
 import { WORKER_DOT, formatUptime, formatTime } from '../design';
 import { SectionHeader, ErrorBanner, Loading } from '../components/ui';
 
-// ── Config ───────────────────────────────────────────────────────────────────
+// -- Config -------------------------------------------------------------------
 
 const HEALTH_CONFIG: Record<HealthLevel, { label: string; dot: string; border: string }> = {
-  HEALTHY:   { label: 'All Systems Operational', dot: 'bg-state-running',    border: 'border-l-state-running' },
-  DEGRADED:  { label: 'Degraded Performance',    dot: 'bg-state-checkpoint', border: 'border-l-state-checkpoint' },
-  UNHEALTHY: { label: 'System Unhealthy',        dot: 'bg-state-failed',     border: 'border-l-state-failed' },
+  HEALTHY:   { label: 'All Systems Operational', dot: 'bg-ok',   border: 'border-l-ok' },
+  DEGRADED:  { label: 'Degraded Performance',    dot: 'bg-warn', border: 'border-l-warn' },
+  UNHEALTHY: { label: 'System Unhealthy',        dot: 'bg-err',  border: 'border-l-err' },
 };
 
 function lagColor(lag: number): string {
-  if (lag < 5) return 'text-state-running';
-  if (lag < 30) return 'text-state-checkpoint';
-  return 'text-state-failed';
+  if (lag < 5) return 'text-ok';
+  if (lag < 30) return 'text-warn';
+  return 'text-err';
 }
 
 function lagBarColor(lag: number): string {
-  if (lag < 5) return 'bg-state-running';
-  if (lag < 30) return 'bg-state-checkpoint';
-  return 'bg-state-failed';
+  if (lag < 5) return 'bg-ok';
+  if (lag < 30) return 'bg-warn';
+  return 'bg-err';
 }
 
 function LagIndicator({ lag }: { lag: number }) {
@@ -33,7 +33,7 @@ function LagIndicator({ lag }: { lag: number }) {
   );
 }
 
-// ── Main page ────────────────────────────────────────────────────────────────
+// -- Main page ----------------------------------------------------------------
 
 function HealthPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
@@ -90,24 +90,24 @@ function HealthPage() {
           <div className="p-5">
             <div className="flex items-center gap-3 mb-4">
               <div className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
-              <h3 className="text-base font-semibold text-text-primary">{cfg.label}</h3>
+              <h3 className="text-base font-semibold text-txt-1">{cfg.label}</h3>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <span className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">Version</span>
-                <p className="text-sm text-text-primary font-mono mt-0.5">{health.version}</p>
+                <span className="text-2xs font-medium text-txt-3 uppercase tracking-wider">Version</span>
+                <p className="text-sm text-txt-1 font-mono mt-0.5">{health.version}</p>
               </div>
               <div>
-                <span className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">Uptime</span>
-                <p className="text-sm text-text-primary mt-0.5">{formatUptime(health.uptime_seconds)}</p>
+                <span className="text-2xs font-medium text-txt-3 uppercase tracking-wider">Uptime</span>
+                <p className="text-sm text-txt-1 mt-0.5">{formatUptime(health.uptime_seconds)}</p>
               </div>
               <div>
-                <span className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">Active Runs</span>
-                <p className="text-sm text-text-primary mt-0.5">{health.active_runs}</p>
+                <span className="text-2xs font-medium text-txt-3 uppercase tracking-wider">Active Runs</span>
+                <p className="text-sm text-txt-1 mt-0.5">{health.active_runs}</p>
               </div>
               <div>
-                <span className="text-2xs font-medium text-text-tertiary uppercase tracking-wider">etcd</span>
-                <p className={`text-sm mt-0.5 font-medium ${health.etcd_connected ? 'text-state-running' : 'text-state-failed'}`}>
+                <span className="text-2xs font-medium text-txt-3 uppercase tracking-wider">etcd</span>
+                <p className={`text-sm mt-0.5 font-medium ${health.etcd_connected ? 'text-ok' : 'text-err'}`}>
                   {health.etcd_connected ? 'Connected' : 'Disconnected'}
                 </p>
               </div>
@@ -118,11 +118,11 @@ function HealthPage() {
 
       {/* Worker section */}
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-text-primary">Workers ({workers.length})</h3>
+        <h3 className="text-sm font-semibold text-txt-1">Workers ({workers.length})</h3>
       </div>
 
       {workers.length === 0 && (
-        <div className="text-center py-12 text-sm text-text-tertiary">No workers registered.</div>
+        <div className="text-center py-12 text-sm text-txt-3">No workers registered.</div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -134,17 +134,17 @@ function HealthPage() {
               {/* Header */}
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="text-sm font-semibold text-text-primary">Worker {w.rank}</p>
-                  <p className="text-2xs font-mono text-text-tertiary mt-0.5">
+                  <p className="text-sm font-semibold text-txt-1">Worker {w.rank}</p>
+                  <p className="text-2xs font-mono text-txt-3 mt-0.5">
                     {w.worker_id.length > 16 ? w.worker_id.slice(0, 16) + '\u2026' : w.worker_id}
                   </p>
                 </div>
                 <span className={`badge ${
                   isActive
-                    ? 'bg-state-running-muted text-state-running'
-                    : 'bg-state-failed-muted text-state-failed'
+                    ? 'bg-ok-muted text-ok'
+                    : 'bg-err-muted text-err'
                 }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${WORKER_DOT[w.status] ?? 'bg-state-neutral'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${WORKER_DOT[w.status] ?? 'bg-muted'}`} />
                   {w.status}
                 </span>
               </div>
@@ -152,22 +152,22 @@ function HealthPage() {
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3 text-xs">
                 <div>
-                  <span className="text-2xs text-text-tertiary">Step</span>
-                  <p className="text-text-primary font-mono mt-0.5">{w.current_step.toLocaleString()}</p>
+                  <span className="text-2xs text-txt-3">Step</span>
+                  <p className="text-txt-1 font-mono mt-0.5">{w.current_step.toLocaleString()}</p>
                 </div>
                 <div>
-                  <span className="text-2xs text-text-tertiary">Heartbeat</span>
-                  <p className="text-text-primary mt-0.5">{formatTime(w.last_heartbeat)}</p>
+                  <span className="text-2xs text-txt-3">Heartbeat</span>
+                  <p className="text-txt-1 mt-0.5">{formatTime(w.last_heartbeat)}</p>
                 </div>
                 <div>
-                  <span className="text-2xs text-text-tertiary">Lag</span>
+                  <span className="text-2xs text-txt-3">Lag</span>
                   <p className={`font-medium mt-0.5 ${lagColor(lag)}`}>{lag.toFixed(1)}s</p>
                 </div>
               </div>
 
               {/* Lag bar */}
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-2xs text-text-tertiary">Heartbeat lag</span>
+                <span className="text-2xs text-txt-3">Heartbeat lag</span>
                 <LagIndicator lag={lag} />
               </div>
             </div>

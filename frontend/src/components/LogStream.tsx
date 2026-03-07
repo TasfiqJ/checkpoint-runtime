@@ -7,12 +7,12 @@ interface LogLine {
 }
 
 const CONTAINER_COLORS: Record<string, string> = {
-  'ckpt-worker-0': 'text-state-running',
-  'ckpt-worker-1': 'text-emerald-300',
-  'ckpt-controlplane': 'text-state-committed',
-  'ckpt-dataplane': 'text-state-recovery',
-  'ckpt-etcd': 'text-purple-400',
-  'ckpt-minio': 'text-state-checkpoint',
+  'ckpt-worker-0': 'text-ok',
+  'ckpt-worker-1': 'text-ok',
+  'ckpt-controlplane': 'text-info',
+  'ckpt-dataplane': 'text-recover',
+  'ckpt-etcd': 'text-brand-violet',
+  'ckpt-minio': 'text-warn',
 };
 
 const HIGHLIGHT_PATTERNS = [
@@ -64,8 +64,8 @@ export default function LogStream({ active }: { active: boolean }) {
         <h4 className="panel-title">Live Logs</h4>
         {active && lines.length > 0 && (
           <div className="ml-auto flex items-center gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-state-running animate-pulse" />
-            <span className="text-2xs text-text-tertiary">streaming</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-ok animate-pulse" />
+            <span className="text-2xs text-txt-3">streaming</span>
           </div>
         )}
       </div>
@@ -75,12 +75,12 @@ export default function LogStream({ active }: { active: boolean }) {
         className="bg-surface-0 font-mono text-[11px] leading-relaxed max-h-72 overflow-y-auto p-2.5 space-y-px"
       >
         {lines.length === 0 ? (
-          <div className="text-text-tertiary text-center py-6">
+          <div className="text-txt-3 text-center py-6">
             Waiting for log output...
           </div>
         ) : (
           lines.map((l, i) => {
-            const color = CONTAINER_COLORS[l.container] ?? 'text-text-tertiary';
+            const color = CONTAINER_COLORS[l.container] ?? 'text-txt-3';
             const bold = isHighlighted(l.line);
             const label = l.container.replace('ckpt-', '');
             return (
@@ -91,7 +91,7 @@ export default function LogStream({ active }: { active: boolean }) {
                 <span className={`${color} flex-shrink-0 w-[72px] truncate`}>
                   [{label}]
                 </span>
-                <span className={`text-text-tertiary break-all ${bold ? 'text-text-primary font-medium' : ''}`}>
+                <span className={`text-txt-3 break-all ${bold ? 'text-txt-1 font-medium' : ''}`}>
                   {l.line}
                 </span>
               </div>

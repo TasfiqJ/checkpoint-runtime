@@ -5,7 +5,7 @@ import { API_BASE } from '../config/api';
 import { RUN_STATE_CONFIG, formatDate, shortId } from '../design';
 import { RunBadge, SectionHeader, ErrorBanner, Loading, EmptyState } from '../components/ui';
 
-// ── New-run modal ────────────────────────────────────────────────────────────
+// -- New-run modal ----------------------------------------------------------
 
 function NewRunModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState<RunConfig>({ name: '', num_workers: 4, checkpoint_interval_steps: 1000 });
@@ -33,20 +33,20 @@ function NewRunModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="card-elevated shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-text-primary mb-5">Create New Run</h3>
+      <div className="glass-strong shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-semibold text-txt-1 mb-5">Create New Run</h3>
 
         {error && (
-          <div className="mb-4 text-sm text-state-failed bg-state-failed-muted border border-state-failed/20 rounded-lg px-3 py-2">
+          <div className="mb-4 text-sm text-err bg-err-muted border border-err/20 rounded-lg px-3 py-2">
             {error}
           </div>
         )}
 
         <label className="block mb-4">
-          <span className="text-xs font-medium text-text-secondary">Run Name</span>
+          <span className="text-xs font-medium text-txt-2">Run Name</span>
           <input
             type="text"
-            className="mt-1.5 block w-full bg-surface-0 border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent transition-colors"
+            className="mt-1.5 block w-full bg-surface-0 border border-line rounded-lg px-3 py-2 text-sm text-txt-1 placeholder-txt-3 focus:outline-none focus:ring-1 focus:ring-brand-violet focus:border-brand-violet transition-colors"
             placeholder="my-training-run"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -54,22 +54,22 @@ function NewRunModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </label>
 
         <label className="block mb-4">
-          <span className="text-xs font-medium text-text-secondary">Number of Workers</span>
+          <span className="text-xs font-medium text-txt-2">Number of Workers</span>
           <input
             type="number"
             min={1}
-            className="mt-1.5 block w-full bg-surface-0 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent transition-colors"
+            className="mt-1.5 block w-full bg-surface-0 border border-line rounded-lg px-3 py-2 text-sm text-txt-1 focus:outline-none focus:ring-1 focus:ring-brand-violet focus:border-brand-violet transition-colors"
             value={form.num_workers}
             onChange={(e) => setForm({ ...form, num_workers: parseInt(e.target.value) || 1 })}
           />
         </label>
 
         <label className="block mb-6">
-          <span className="text-xs font-medium text-text-secondary">Checkpoint Interval (steps)</span>
+          <span className="text-xs font-medium text-txt-2">Checkpoint Interval (steps)</span>
           <input
             type="number"
             min={1}
-            className="mt-1.5 block w-full bg-surface-0 border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent transition-colors"
+            className="mt-1.5 block w-full bg-surface-0 border border-line rounded-lg px-3 py-2 text-sm text-txt-1 focus:outline-none focus:ring-1 focus:ring-brand-violet focus:border-brand-violet transition-colors"
             value={form.checkpoint_interval_steps}
             onChange={(e) => setForm({ ...form, checkpoint_interval_steps: parseInt(e.target.value) || 100 })}
           />
@@ -90,7 +90,7 @@ function NewRunModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   );
 }
 
-// ── Main page ────────────────────────────────────────────────────────────────
+// -- Main page --------------------------------------------------------------
 
 function RunsPage() {
   const [runs, setRuns] = useState<RunStatus[]>([]);
@@ -148,7 +148,7 @@ function RunsPage() {
         <EmptyState
           message="No training runs found."
           action={
-            <button onClick={() => setShowNewRun(true)} className="text-sm text-accent hover:text-accent-hover transition-colors">
+            <button onClick={() => setShowNewRun(true)} className="text-sm text-brand-violet hover:text-brand-blue transition-colors">
               Create your first run
             </button>
           }
@@ -159,7 +159,7 @@ function RunsPage() {
         <div className="card overflow-hidden">
           <table className="min-w-full">
             <thead>
-              <tr className="border-b border-border">
+              <tr className="border-b border-line">
                 <th className="table-header">Name</th>
                 <th className="table-header">Run ID</th>
                 <th className="table-header">State</th>
@@ -169,32 +169,32 @@ function RunsPage() {
                 <th className="table-header text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border-subtle">
+            <tbody className="divide-y divide-line-subtle">
               {runs.map((run) => {
                 const stateConfig = RUN_STATE_CONFIG[run.state];
                 return (
                   <tr key={run.run_id} className="hover:bg-surface-2/50 transition-colors">
                     <td className="table-cell">
-                      <Link to={`/runs/${run.run_id}`} className="text-accent hover:text-accent-hover font-medium transition-colors">
+                      <Link to={`/runs/${run.run_id}`} className="text-brand-violet hover:text-brand-blue font-medium transition-colors">
                         {run.name || '(unnamed)'}
                       </Link>
                     </td>
-                    <td className="table-cell text-text-tertiary font-mono text-xs">
+                    <td className="table-cell text-txt-3 font-mono text-xs">
                       {shortId(run.run_id)}
                     </td>
                     <td className="table-cell">
                       <RunBadge state={run.state} />
                     </td>
-                    <td className="table-cell text-text-secondary font-mono">
+                    <td className="table-cell text-txt-2 font-mono">
                       {run.current_step.toLocaleString()}
                     </td>
-                    <td className="table-cell text-text-secondary">
+                    <td className="table-cell text-txt-2">
                       <span className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${stateConfig.dot}`} />
                         {run.active_workers}
                       </span>
                     </td>
-                    <td className="table-cell text-text-tertiary text-xs">
+                    <td className="table-cell text-txt-3 text-xs">
                       {formatDate(run.created_at)}
                     </td>
                     <td className="table-cell text-right">
@@ -202,7 +202,7 @@ function RunsPage() {
                         {(run.state === 'CREATED' || run.state === 'COMMITTED') && (
                           <button
                             onClick={() => postAction(run.run_id, 'start')}
-                            className="px-2.5 py-1 text-2xs font-medium rounded-md bg-state-running-muted text-state-running hover:bg-state-running/20 transition-colors"
+                            className="px-2.5 py-1 text-2xs font-medium rounded-md bg-ok-muted text-ok hover:bg-ok/20 transition-colors"
                           >
                             Start
                           </button>
@@ -217,7 +217,7 @@ function RunsPage() {
                         )}
                         <Link
                           to={`/runs/${run.run_id}`}
-                          className="px-2.5 py-1 text-2xs font-medium rounded-md bg-surface-3 text-text-secondary hover:text-text-primary hover:bg-surface-3/80 transition-colors"
+                          className="px-2.5 py-1 text-2xs font-medium rounded-md bg-surface-3 text-txt-2 hover:text-txt-1 hover:bg-surface-3/80 transition-colors"
                         >
                           View
                         </Link>

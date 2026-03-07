@@ -22,7 +22,7 @@ export default function ContainerStatus() {
         <h4 className="panel-title">Infrastructure</h4>
       </div>
 
-      <div className="divide-y divide-border-subtle max-h-64 overflow-y-auto">
+      <div className="divide-y divide-line-subtle max-h-64 overflow-y-auto">
         {containers && containers.length > 0 ? (
           containers.map((c) => {
             const isRunning = c.state === 'running';
@@ -30,20 +30,20 @@ export default function ContainerStatus() {
               <div key={c.name} className="flex items-center gap-2 px-3.5 py-1.5 text-xs">
                 <div
                   className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                    isRunning ? 'bg-state-running' : 'bg-state-failed'
+                    isRunning ? 'bg-ok' : 'bg-err'
                   }`}
                 />
-                <span className="font-mono text-text-secondary truncate flex-1">
+                <span className="font-mono text-txt-2 truncate flex-1">
                   {c.name}
                 </span>
-                <span className={`text-2xs ${isRunning ? 'text-text-tertiary' : 'text-state-failed'}`}>
+                <span className={`text-2xs ${isRunning ? 'text-txt-3' : 'text-err'}`}>
                   {c.status}
                 </span>
               </div>
             );
           })
         ) : (
-          <div className="px-3 py-4 text-xs text-text-tertiary text-center">
+          <div className="px-3 py-4 text-xs text-txt-3 text-center">
             Waiting for container data...
           </div>
         )}

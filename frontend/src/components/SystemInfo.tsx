@@ -26,7 +26,7 @@ export default function SystemInfo() {
           <span className="panel-tag">uname</span>
           <h4 className="panel-title">Host System</h4>
         </div>
-        <p className="text-2xs text-text-tertiary text-center py-2">Loading system info...</p>
+        <p className="text-2xs text-txt-3 text-center py-2">Loading system info...</p>
       </div>
     );
   }
@@ -51,10 +51,10 @@ export default function SystemInfo() {
       <div className="p-2.5 space-y-0.5 font-mono text-[11px]">
         {rows.map((row) => (
           <div key={row.label} className="flex gap-2">
-            <span className="text-text-tertiary w-[72px] flex-shrink-0 text-right">
+            <span className="text-txt-3 w-[72px] flex-shrink-0 text-right">
               {row.label}
             </span>
-            <span className="text-text-secondary">{row.value}</span>
+            <span className="text-txt-2">{row.value}</span>
           </div>
         ))}
       </div>

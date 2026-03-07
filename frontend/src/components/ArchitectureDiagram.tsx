@@ -19,16 +19,16 @@ function Arrow({ direction = 'right' }: { direction?: 'right' | 'down' }) {
   if (direction === 'down') {
     return (
       <div className="flex justify-center py-1">
-        <div className="w-px h-6 bg-border-emphasis relative">
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px] border-t-border-emphasis" />
+        <div className="w-px h-6 bg-line-emphasis relative">
+          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px] border-t-line-emphasis" />
         </div>
       </div>
     );
   }
   return (
     <div className="flex items-center px-1">
-      <div className="h-px w-6 bg-border-emphasis relative">
-        <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-l-[5px] border-l-border-emphasis" />
+      <div className="h-px w-6 bg-line-emphasis relative">
+        <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-l-[5px] border-l-line-emphasis" />
       </div>
     </div>
   );
@@ -43,12 +43,12 @@ export default function ArchitectureDiagram() {
           <ServiceBox
             label="Worker 0"
             sub="PyTorch DDP"
-            color="border-emerald-800/60 bg-emerald-950/30 text-state-running"
+            color="border-emerald-800/60 bg-emerald-950/30 text-ok"
           />
           <ServiceBox
             label="Worker 1"
             sub="PyTorch DDP"
-            color="border-emerald-800/60 bg-emerald-950/30 text-state-running"
+            color="border-emerald-800/60 bg-emerald-950/30 text-ok"
           />
         </div>
 
@@ -59,7 +59,7 @@ export default function ArchitectureDiagram() {
           <ServiceBox
             label="Control Plane"
             sub="Python / FastAPI"
-            color="border-sky-800/60 bg-sky-950/30 text-state-committed"
+            color="border-sky-800/60 bg-sky-950/30 text-info"
           />
           <Arrow direction="down" />
           <ServiceBox
@@ -76,13 +76,13 @@ export default function ArchitectureDiagram() {
           <ServiceBox
             label="Data Plane"
             sub="Rust / gRPC"
-            color="border-orange-800/60 bg-orange-950/30 text-state-recovery"
+            color="border-orange-800/60 bg-orange-950/30 text-recover"
           />
           <Arrow direction="down" />
           <ServiceBox
             label="MinIO"
             sub="S3 Storage"
-            color="border-amber-800/60 bg-amber-950/30 text-state-checkpoint"
+            color="border-amber-800/60 bg-amber-950/30 text-warn"
           />
         </div>
 
@@ -93,23 +93,23 @@ export default function ArchitectureDiagram() {
           <ServiceBox
             label="Prometheus"
             sub="Metrics"
-            color="border-rose-800/60 bg-rose-950/30 text-state-failed"
+            color="border-rose-800/60 bg-rose-950/30 text-err"
           />
           <ServiceBox
             label="Grafana"
             sub="Dashboards"
-            color="border-rose-800/60 bg-rose-950/30 text-state-failed"
+            color="border-rose-800/60 bg-rose-950/30 text-err"
           />
           <ServiceBox
             label="Jaeger"
             sub="Tracing"
-            color="border-rose-800/60 bg-rose-950/30 text-state-failed"
+            color="border-rose-800/60 bg-rose-950/30 text-err"
           />
         </div>
       </div>
 
       <div className="flex justify-center mt-3">
-        <div className="text-2xs text-text-tertiary bg-surface-3 rounded-full px-3 py-0.5">
+        <div className="text-2xs text-txt-3 bg-surface-3 rounded-full px-3 py-0.5">
           Connected via OpenTelemetry Collector
         </div>
       </div>

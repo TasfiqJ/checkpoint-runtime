@@ -95,10 +95,10 @@ function RunDetailPage() {
   return (
     <div>
       {/* Breadcrumb */}
-      <div className="mb-4 flex items-center gap-2 text-xs text-text-tertiary">
-        <Link to="/runs" className="hover:text-accent transition-colors">Runs</Link>
+      <div className="mb-4 flex items-center gap-2 text-xs text-txt-3">
+        <Link to="/runs" className="hover:text-brand-violet transition-colors">Runs</Link>
         <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5l3 3.5-3 3.5" stroke="currentColor" strokeWidth="1.2" /></svg>
-        <span className="text-text-secondary font-medium">{run.name || run.run_id.slice(0, 12)}</span>
+        <span className="text-txt-2 font-medium">{run.name || run.run_id.slice(0, 12)}</span>
       </div>
 
       {/* Header */}
@@ -108,16 +108,16 @@ function RunDetailPage() {
             <h2 className="page-header">{run.name || 'Unnamed Run'}</h2>
             <RunBadge state={run.state} size="md" />
           </div>
-          <p className="mt-1.5 text-xs text-text-tertiary font-mono">{run.run_id}</p>
+          <p className="mt-1.5 text-xs text-txt-3 font-mono">{run.run_id}</p>
           {run.error_message && (
-            <p className="mt-2 text-sm text-state-failed bg-state-failed-muted border border-state-failed/20 rounded-lg px-3 py-1.5">
+            <p className="mt-2 text-sm text-err bg-err-muted border border-err/20 rounded-lg px-3 py-1.5">
               {run.error_message}
             </p>
           )}
         </div>
         <div className="flex items-center gap-2">
           {(run.state === 'RUNNING' || run.state === 'CHECKPOINTING') && (
-            <button onClick={() => postAction('checkpoint')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-state-checkpoint-muted text-state-checkpoint hover:bg-state-checkpoint/20 transition-colors">
+            <button onClick={() => postAction('checkpoint')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-warn-muted text-warn hover:bg-warn/20 transition-colors">
               Trigger Checkpoint
             </button>
           )}
@@ -125,7 +125,7 @@ function RunDetailPage() {
             <button onClick={() => postAction('resume')} className="btn-primary text-xs">Resume</button>
           )}
           {(run.state === 'CREATED' || run.state === 'COMMITTED') && (
-            <button onClick={() => postAction('start')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-state-running-muted text-state-running hover:bg-state-running/20 transition-colors">
+            <button onClick={() => postAction('start')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-ok-muted text-ok hover:bg-ok/20 transition-colors">
               Start
             </button>
           )}
@@ -145,15 +145,15 @@ function RunDetailPage() {
 
       {/* Checkpoint history */}
       <div className="card overflow-hidden mb-6">
-        <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-semibold text-text-primary">Checkpoint History</h3>
+        <div className="px-4 py-3 border-b border-line">
+          <h3 className="text-sm font-semibold text-txt-1">Checkpoint History</h3>
         </div>
         {checkpoints.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-text-tertiary">No checkpoints yet.</div>
+          <div className="px-4 py-10 text-center text-sm text-txt-3">No checkpoints yet.</div>
         ) : (
           <table className="min-w-full">
             <thead>
-              <tr className="border-b border-border">
+              <tr className="border-b border-line">
                 <th className="table-header">Checkpoint ID</th>
                 <th className="table-header">Step</th>
                 <th className="table-header">State</th>
@@ -162,17 +162,17 @@ function RunDetailPage() {
                 <th className="table-header">Created</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border-subtle">
+            <tbody className="divide-y divide-line-subtle">
               {checkpoints.map((ckpt) => (
                 <tr key={ckpt.checkpoint_id} className="hover:bg-surface-2/50 transition-colors">
-                  <td className="table-cell text-text-secondary font-mono text-xs">
+                  <td className="table-cell text-txt-2 font-mono text-xs">
                     {ckpt.checkpoint_id.length > 16 ? ckpt.checkpoint_id.slice(0, 16) + '\u2026' : ckpt.checkpoint_id}
                   </td>
-                  <td className="table-cell text-text-secondary font-mono">{ckpt.step.toLocaleString()}</td>
+                  <td className="table-cell text-txt-2 font-mono">{ckpt.step.toLocaleString()}</td>
                   <td className="table-cell"><CkptBadge state={ckpt.state} /></td>
-                  <td className="table-cell text-text-secondary">{ckpt.num_shards}</td>
-                  <td className="table-cell text-text-secondary">{formatBytes(ckpt.total_bytes)}</td>
-                  <td className="table-cell text-text-tertiary text-xs">{formatDate(ckpt.created_at)}</td>
+                  <td className="table-cell text-txt-2">{ckpt.num_shards}</td>
+                  <td className="table-cell text-txt-2">{formatBytes(ckpt.total_bytes)}</td>
+                  <td className="table-cell text-txt-3 text-xs">{formatDate(ckpt.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -182,32 +182,32 @@ function RunDetailPage() {
 
       {/* SSE Event Stream */}
       <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text-primary">Event Stream</h3>
-          <div className="flex items-center gap-2 text-xs text-text-tertiary">
+        <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-txt-1">Event Stream</h3>
+          <div className="flex items-center gap-2 text-xs text-txt-3">
             <LiveDot />
             Live
           </div>
         </div>
         <div className="h-64 overflow-y-auto font-mono text-xs p-4 space-y-0.5 bg-surface-0">
           {events.length === 0 && (
-            <p className="text-text-tertiary">Waiting for events...</p>
+            <p className="text-txt-3">Waiting for events...</p>
           )}
           {events.map((evt, i) => {
             const typeColor =
-              evt.type === 'error' ? 'text-state-failed' :
-              evt.type === 'state_change' ? 'text-state-checkpoint' :
-              evt.type === 'checkpoint' ? 'text-state-committed' :
-              'text-text-tertiary';
+              evt.type === 'error' ? 'text-err' :
+              evt.type === 'state_change' ? 'text-warn' :
+              evt.type === 'checkpoint' ? 'text-info' :
+              'text-txt-3';
             return (
               <div key={i} className="flex gap-3">
-                <span className="text-text-tertiary/60 shrink-0">
+                <span className="text-txt-3/60 shrink-0">
                   {new Date(evt.timestamp).toLocaleTimeString()}
                 </span>
                 <span className={`shrink-0 uppercase font-medium ${typeColor}`}>
                   [{evt.type}]
                 </span>
-                <span className="text-text-secondary break-all">{evt.data}</span>
+                <span className="text-txt-2 break-all">{evt.data}</span>
               </div>
             );
           })}
