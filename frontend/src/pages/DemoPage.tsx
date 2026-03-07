@@ -414,7 +414,7 @@ export default function DemoPage() {
       {runId && <DemoWalkthrough currentStep={walkthroughStep} />}
 
       {runId && run && (
-        <div className="flex gap-4">
+        <div className="flex flex-col lg:flex-row gap-4">
           {/* ─── Left Column: Main Demo ─── */}
           <div className="flex-1 min-w-0 space-y-4">
 
@@ -458,7 +458,7 @@ export default function DemoPage() {
             )}
 
             {/* Metric Cards */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <MetricCard label="Training Step" value={run.current_step} hint="How far along training is" />
               <MetricCard label="Checkpoints" value={committedCheckpoints.length} hint="Auto-saved progress points" />
               <MetricCard label="Data Saved" value={formatBytes(totalBytes)} hint="Total model state backed up" />
@@ -588,7 +588,7 @@ export default function DemoPage() {
           </div>
 
           {/* ─── Right Column: Proof Panels ─── */}
-          <div className="w-[380px] flex-shrink-0 space-y-3">
+          <div className="w-full lg:w-[380px] lg:flex-shrink-0 space-y-3">
             <div className="card px-4 py-3">
               <p className="text-xs font-semibold text-txt-1 mb-1">Proof Panels</p>
               <p className="text-2xs text-txt-3 leading-relaxed">
