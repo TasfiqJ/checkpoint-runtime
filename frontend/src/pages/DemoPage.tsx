@@ -224,6 +224,36 @@ export default function DemoPage() {
             }
           }
           prevStateRef.current = data.state;
+
+          // Safety net: if recovery completed but we missed the state transition,
+          // build the recovery summary anyway after a reasonable delay.
+          // This catches edge cases like double-clicks or polls that skip states.
+          if (data.state === 'RUNNING' && hasKilledRef.current && !recoverySummary &&
+              killTimeRef.current > 0 && (Date.now() - killTimeRef.current) > 8000) {
+            // Recovery clearly completed — run is RUNNING, kill was >8s ago
+            const now = Date.now();
+            const detectMs = failDetectedTimeRef.current > 0
+              ? failDetectedTimeRef.current - killTimeRef.current
+              : (recoveryStartTimeRef.current > 0
+                ? recoveryStartTimeRef.current - killTimeRef.current
+                : 1000);
+            setRecoverySummary({
+              detectTime: detectMs / 1000,
+              recoverTime: (now - killTimeRef.current) / 1000,
+              restoredStep: lastCheckpointStepRef.current,
+              currentStep: data.current_step,
+              checkpointLoss: lastCheckpointLossRef.current,
+            });
+            setTimeout(() => setRecoverySummary(null), 30000);
+
+            // Stop elapsed timer
+            if (elapsedTimerRef.current) {
+              clearInterval(elapsedTimerRef.current);
+              elapsedTimerRef.current = null;
+            }
+            setElapsedSinceKill(null);
+            setWalkthroughStep(4);
+          }
         }
         if (workersRes.ok) setWorkers(await workersRes.json());
         if (cpRes.ok) {
