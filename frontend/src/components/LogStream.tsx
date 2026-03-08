@@ -54,10 +54,10 @@ export default function LogStream({ active }: { active: boolean }) {
     return () => es.close();
   }, [active]);
 
-  // Auto-scroll only when user hasn't scrolled up
+  // Auto-scroll only within the log container, never the whole page
   useEffect(() => {
-    if (!userScrolled) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!userScrolled && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [lines, userScrolled]);
 
@@ -128,7 +128,9 @@ export default function LogStream({ active }: { active: boolean }) {
         <button
           onClick={() => {
             setUserScrolled(false);
-            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+            if (containerRef.current) {
+              containerRef.current.scrollTop = containerRef.current.scrollHeight;
+            }
           }}
           className="w-full py-1.5 text-2xs text-brand-violet bg-surface-2 hover:bg-surface-3 border-t border-line-subtle transition-colors cursor-pointer"
         >
