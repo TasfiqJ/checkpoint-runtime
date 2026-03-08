@@ -517,7 +517,16 @@ def train(args: argparse.Namespace) -> None:
             # The first resume() call (in _get_or_create_run_id) moved the run
             # from FAILED -> RECOVERING.  Now that the checkpoint is loaded we
             # signal that recovery is complete.
+            #
+            # Hold RECOVERING for a few seconds so the frontend (which polls
+            # every 500ms–2s) has time to display it before we go to RUNNING.
             if start_step > 0 and rank == 0:
+                logger.info(
+                    "Checkpoint restored (step=%d). Holding RECOVERING for 6s "
+                    "so the frontend can display the recovery state...",
+                    start_step,
+                )
+                time.sleep(6)
                 try:
                     runtime_client.resume(run_id)
                     logger.info(

@@ -149,7 +149,10 @@ export default function DemoPage() {
     }]);
   }, []);
 
-  // Poll run status
+  // Poll run status — fast (750ms) during kill/recovery, normal (2s) otherwise
+  const isRecovering = hasKilled && !recoverySummary;
+  const pollInterval = isRecovering ? 750 : 2000;
+
   useEffect(() => {
     if (!runId) return;
     const poll = async () => {
@@ -186,7 +189,8 @@ export default function DemoPage() {
             }
 
             // Show recovery success banner + recovery summary + walkthrough advance
-            if (data.state === 'RUNNING' && (prevStateRef.current === 'RECOVERING' || prevStateRef.current === 'FAILED')) {
+            if (data.state === 'RUNNING' && hasKilled && !recoverySummary &&
+                (prevStateRef.current === 'RECOVERING' || prevStateRef.current === 'FAILED')) {
               // Stop elapsed timer
               if (elapsedTimerRef.current) {
                 clearInterval(elapsedTimerRef.current);
@@ -206,7 +210,7 @@ export default function DemoPage() {
                   currentStep: data.current_step,
                   checkpointLoss: lastCheckpointLossRef.current,
                 });
-                setTimeout(() => setRecoverySummary(null), 15000);
+                setTimeout(() => setRecoverySummary(null), 30000);
               }
 
               if (hasKilled) {
@@ -243,9 +247,9 @@ export default function DemoPage() {
       } catch { /* ignore polling errors */ }
     };
     poll();
-    const id = setInterval(poll, 2000);
+    const id = setInterval(poll, pollInterval);
     return () => clearInterval(id);
-  }, [runId, addEvent, hasKilled]);
+  }, [runId, addEvent, hasKilled, pollInterval, recoverySummary]);
 
   // Start demo
   const handleStart = async () => {
