@@ -176,7 +176,8 @@ function App() {
               initial="initial"
               animate="enter"
               exit="exit"
-              className="fixed right-0 top-0 z-40 h-screen w-[80vw] max-w-[380px] bg-surface-1"
+              className="fixed right-0 top-0 z-40 w-[80vw] max-w-[380px] bg-surface-1"
+              style={{ height: '100dvh' }}
             >
               <div className="h-full flex flex-col justify-between px-10 pt-28 pb-10">
                 {/* Navigation header */}
