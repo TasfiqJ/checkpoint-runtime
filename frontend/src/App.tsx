@@ -25,6 +25,37 @@ const mobileNavItems = [
   { to: '/try-locally', label: 'Try Locally' },
 ];
 
+/* ─── SVG curved edge for the slide-in menu ─── */
+function MenuCurve() {
+  const [h, setH] = useState(window.innerHeight);
+  useEffect(() => {
+    const onResize = () => setH(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const initial = `M100 0 L200 0 L200 ${h} L100 ${h} Q-100 ${h / 2} 100 0`;
+  const target = `M100 0 L200 0 L200 ${h} L100 ${h} Q100 ${h / 2} 100 0`;
+
+  return (
+    <svg
+      className="absolute top-0 -left-[99px] w-[100px] h-full"
+      style={{ fill: 'rgb(var(--surface-1))', stroke: 'none' }}
+    >
+      <motion.path
+        variants={{
+          initial: { d: initial },
+          enter: { d: target, transition: { duration: 1, ease: [0.76, 0, 0.24, 1] } },
+          exit: { d: initial, transition: { duration: 0.8, ease: [0.76, 0, 0.24, 1] } },
+        }}
+        initial="initial"
+        animate="enter"
+        exit="exit"
+      />
+    </svg>
+  );
+}
+
 function App() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -101,96 +132,95 @@ function App() {
 
       {/* ─── Mobile nav (visible only on mobile) ─── */}
       <div className="md:hidden">
-        {/* Expanding underlay */}
-        <motion.div
-          initial={false}
-          animate={menuOpen ? 'open' : 'closed'}
-          variants={UNDERLAY_VARIANTS}
-          style={{ top: 16, right: 16 }}
-          className="fixed z-40 rounded-xl bg-surface-1/50 backdrop-blur-sm border border-line/30"
-        />
-
-        {/* Hamburger button */}
+        {/* Hamburger button — round glass pill */}
         <motion.button
           initial={false}
           animate={menuOpen ? 'open' : 'closed'}
           onClick={() => setMenuOpen((v) => !v)}
-          className={`group fixed right-4 top-4 z-50 h-16 w-16 transition-all ${
-            menuOpen ? 'rounded-bl-xl rounded-tr-xl' : 'rounded-xl'
-          }`}
+          className="fixed right-4 top-4 z-50 h-14 w-14 rounded-full glass-strong shadow-glow-sm"
         >
           <motion.span
             variants={HAMBURGER_VARIANTS.top}
-            className="absolute block h-0.5 w-6 rounded-full bg-txt-1"
+            className="absolute block h-0.5 w-5 rounded-full bg-txt-1"
             style={{ y: '-50%', left: '50%', x: '-50%' }}
           />
           <motion.span
             variants={HAMBURGER_VARIANTS.middle}
-            className="absolute block h-0.5 w-6 rounded-full bg-txt-1"
+            className="absolute block h-0.5 w-5 rounded-full bg-txt-1"
             style={{ left: '50%', x: '-50%', top: '50%', y: '-50%' }}
           />
           <motion.span
             variants={HAMBURGER_VARIANTS.bottom}
-            className="absolute block h-0.5 w-3 rounded-full bg-txt-1"
+            className="absolute block h-0.5 w-2.5 rounded-full bg-txt-1"
             style={{ x: '-50%', y: '50%' }}
           />
         </motion.button>
 
-        {/* Overlay content */}
+        {/* Backdrop + sliding panel */}
         <AnimatePresence>
           {menuOpen && (
-            <motion.nav
+            <motion.div
+              key="backdrop"
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { delay: 0.3, duration: 0.3 } }}
-              exit={{ opacity: 0, transition: { delay: 0.1, duration: 0.2 } }}
-              className="fixed right-4 top-4 z-40 h-[calc(100vh_-_32px)] w-[calc(100%_-_32px)] overflow-hidden flex flex-col"
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5, ease: [0.76, 0, 0.24, 1] }}
+              onClick={() => setMenuOpen(false)}
+              className="fixed inset-0 z-30 bg-black/40"
+            />
+          )}
+          {menuOpen && (
+            <motion.nav
+              key="panel"
+              variants={MENU_SLIDE}
+              initial="initial"
+              animate="enter"
+              exit="exit"
+              className="fixed right-0 top-0 z-40 h-screen w-[80vw] max-w-[380px] bg-surface-1"
             >
-              {/* Links */}
-              <div className="flex-1 flex flex-col justify-center space-y-4 p-10">
-                {mobileNavItems.map((item, idx) => (
-                  <motion.div
-                    key={item.to}
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{
-                      opacity: 1,
-                      y: 0,
-                      transition: {
-                        delay: 0.75 + idx * 0.125,
-                        duration: 0.5,
-                        ease: 'easeInOut',
-                      },
-                    }}
-                    exit={{ opacity: 0, y: -8 }}
-                  >
-                    <Link
-                      to={item.to}
-                      onClick={() => setMenuOpen(false)}
-                      className={`block text-4xl font-serif font-bold transition-colors ${
-                        isActive(item.to)
-                          ? 'text-brand-violet'
-                          : 'text-txt-2 hover:text-txt-1'
-                      }`}
-                    >
-                      {item.label}.
-                    </Link>
-                  </motion.div>
-                ))}
-              </div>
+              <div className="h-full flex flex-col justify-between px-10 pt-28 pb-10">
+                {/* Navigation header */}
+                <div>
+                  <p className="uppercase text-[11px] tracking-[0.15em] text-txt-3 mb-10 pb-3 border-b border-line">
+                    Navigation
+                  </p>
+                  <div className="flex flex-col gap-4">
+                    {mobileNavItems.map((item, i) => (
+                      <motion.div
+                        key={item.to}
+                        custom={i}
+                        variants={LINK_SLIDE}
+                        initial="initial"
+                        animate="enter"
+                        exit="exit"
+                        className="relative flex items-center"
+                      >
+                        <motion.div
+                          variants={INDICATOR_SCALE}
+                          animate={isActive(item.to) ? 'open' : 'closed'}
+                          className="absolute -left-5 w-2.5 h-2.5 rounded-full bg-brand-violet"
+                        />
+                        <Link
+                          to={item.to}
+                          onClick={() => setMenuOpen(false)}
+                          className={`text-[2.75rem] leading-tight font-serif font-light transition-colors ${
+                            isActive(item.to) ? 'text-txt-1' : 'text-txt-3 hover:text-txt-1'
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
 
-              {/* Footer */}
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{
-                  opacity: 1,
-                  y: 0,
-                  transition: { delay: 1.125, duration: 0.5, ease: 'easeInOut' },
-                }}
-                exit={{ opacity: 0, y: 8 }}
-                className="px-10 pb-8 flex items-center justify-between"
-              >
-                <ThemeToggle />
-                <span className="text-xs text-txt-3 font-mono">Checkpoint Runtime</span>
-              </motion.div>
+                {/* Footer */}
+                <div className="flex items-center justify-between">
+                  <ThemeToggle />
+                  <span className="text-xs text-txt-3 font-mono">Checkpoint Runtime</span>
+                </div>
+              </div>
+              <MenuCurve />
             </motion.nav>
           )}
         </AnimatePresence>
@@ -218,23 +248,29 @@ export default App;
 
 /* ─── Animation variants ─── */
 
-const UNDERLAY_VARIANTS = {
-  open: {
-    width: 'calc(100% - 32px)',
-    height: 'calc(100vh - 32px)',
-    transition: { type: 'spring' as const, mass: 3, stiffness: 400, damping: 50 },
-  },
-  closed: {
-    width: '80px',
-    height: '80px',
-    transition: {
-      delay: 0.75,
-      type: 'spring' as const,
-      mass: 3,
-      stiffness: 400,
-      damping: 50,
-    },
-  },
+const EASE_CURVE: [number, number, number, number] = [0.76, 0, 0.24, 1];
+
+const MENU_SLIDE = {
+  initial: { x: 'calc(100% + 100px)' },
+  enter: { x: '0%', transition: { duration: 0.8, ease: EASE_CURVE } },
+  exit: { x: 'calc(100% + 100px)', transition: { duration: 0.8, ease: EASE_CURVE } },
+};
+
+const LINK_SLIDE = {
+  initial: { x: 80 },
+  enter: (i: number) => ({
+    x: 0,
+    transition: { duration: 0.8, ease: EASE_CURVE, delay: 0.05 * i },
+  }),
+  exit: (i: number) => ({
+    x: 80,
+    transition: { duration: 0.8, ease: EASE_CURVE, delay: 0.05 * i },
+  }),
+};
+
+const INDICATOR_SCALE = {
+  open: { scale: 1, transition: { duration: 0.3 } },
+  closed: { scale: 0, transition: { duration: 0.4 } },
 };
 
 const HAMBURGER_VARIANTS = {
