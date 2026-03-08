@@ -107,17 +107,17 @@
     @apply text-xs font-mono font-medium bg-surface-3 text-txt-3 px-2 py-0.5 rounded-md;
   }
   .panel-title {
-    @apply text-sm font-semibold text-txt-2 tracking-wide;
+    @apply text-base font-semibold text-txt-2 tracking-wide;
   }
 
   /* ── Helper text — friendly explanations ────── */
   .helper {
-    @apply text-xs text-txt-3 leading-relaxed mt-1;
+    @apply text-sm text-txt-3 leading-relaxed mt-1;
   }
 
   /* ── Metric card ────────────────────────────── */
   .metric-label {
-    @apply text-xs font-medium text-txt-3 tracking-wide;
+    @apply text-sm font-medium text-txt-3 tracking-wide;
   }
   .metric-value {
     @apply text-2xl font-bold font-mono text-txt-1 mt-1;
@@ -171,7 +171,7 @@
 
   /* ── Section counter (Firecrawl-inspired) ──── */
   .section-counter {
-    @apply inline-flex items-center gap-2 text-xs font-mono text-txt-3 mb-8;
+    @apply inline-flex items-center gap-2 text-sm font-mono text-txt-3 mb-8;
   }
   .section-counter .num {
     @apply text-brand-violet font-semibold;

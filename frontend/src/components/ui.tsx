@@ -5,7 +5,7 @@ import { RUN_STATE_CONFIG, CKPT_STATE_CONFIG } from '../design';
 
 export function RunBadge({ state, size = 'sm' }: { state: RunState; size?: 'sm' | 'md' }) {
   const cfg = RUN_STATE_CONFIG[state] ?? RUN_STATE_CONFIG.CREATED;
-  const sizeClass = size === 'md' ? 'px-3 py-1 text-xs' : 'px-2.5 py-0.5 text-2xs';
+  const sizeClass = size === 'md' ? 'px-3 py-1 text-sm' : 'px-2.5 py-0.5 text-xs';
   return (
     <span className={`badge ${sizeClass} ${cfg.bg} ${cfg.text}`} title={cfg.desc}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -119,7 +119,7 @@ export function LiveDot() {
 
 export function Explainer({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-2xs text-txt-3 leading-relaxed bg-surface-2 rounded-xl px-3.5 py-2.5 border border-line-subtle">
+    <p className="text-xs text-txt-3 leading-relaxed bg-surface-2 rounded-xl px-3.5 py-2.5 border border-line-subtle">
       {children}
     </p>
   );

@@ -43,7 +43,7 @@ export default function TrainingLossChart({
           <span className="panel-tag">loss</span>
           <h4 className="panel-title">Training Loss</h4>
         </div>
-        <p className="text-xs text-txt-3 mt-3 text-center py-6">Waiting for training data...</p>
+        <p className="text-sm text-txt-3 mt-3 text-center py-6">Waiting for training data...</p>
       </div>
     );
   }
@@ -64,7 +64,7 @@ export default function TrainingLossChart({
         <span className="panel-tag">loss</span>
         <h4 className="panel-title">Training Loss</h4>
       </div>
-      <p className="text-2xs text-txt-3 mt-1 mb-3">
+      <p className="text-xs text-txt-3 mt-1 mb-3">
         Synthetic workload — loss shows training is progressing. Dots mark checkpoints and events.
       </p>
 
@@ -150,7 +150,7 @@ export default function TrainingLossChart({
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-2xs text-txt-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-txt-3">
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full bg-[#10b981]" /> Loss
         </span>

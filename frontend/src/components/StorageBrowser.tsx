@@ -59,13 +59,13 @@ export default function StorageBrowser({ active }: { active: boolean }) {
         <span className="panel-tag">s3://</span>
         <h4 className="panel-title">Object Storage</h4>
         {data && (
-          <span className="ml-auto text-2xs text-txt-3">
+          <span className="ml-auto text-xs text-txt-3">
             {files.length} files &middot; {formatBytes(data.total_bytes)}
           </span>
         )}
       </div>
 
-      <div className="font-mono text-[11px] max-h-72 overflow-y-auto p-2.5">
+      <div className="font-mono text-xs max-h-72 overflow-y-auto p-2.5">
         {files.length === 0 ? (
           <div className="text-txt-3 text-center py-6">
             No checkpoint files yet...
@@ -110,7 +110,7 @@ export default function StorageBrowser({ active }: { active: boolean }) {
                             </span>
                           </div>
                           {isManifest && expandedManifest === f.key && manifestContent && (
-                            <pre className="ml-2 mt-1 mb-2 p-2 bg-surface-0 border border-line rounded text-[10px] text-txt-3 overflow-x-auto max-w-full">
+                            <pre className="ml-2 mt-1 mb-2 p-2 bg-surface-0 border border-line rounded text-xs text-txt-3 overflow-x-auto max-w-full">
                               {JSON.stringify(manifestContent, null, 2)}
                             </pre>
                           )}

@@ -23,7 +23,7 @@ export default function ContainerStatus() {
       </div>
 
       <div className="px-3.5 py-2 border-b border-line-subtle">
-        <p className="text-2xs text-txt-3 leading-relaxed">
+        <p className="text-xs text-txt-3 leading-relaxed">
           Live Docker containers on the server. When you kill a worker, watch its status change from{' '}
           <span className="text-ok">running</span> to <span className="text-err">exited</span> and back.
         </p>
@@ -34,7 +34,7 @@ export default function ContainerStatus() {
           containers.map((c) => {
             const isRunning = c.state === 'running';
             return (
-              <div key={c.name} className="flex items-center gap-2 px-3.5 py-1.5 text-xs">
+              <div key={c.name} className="flex items-center gap-2 px-3.5 py-1.5 text-sm">
                 <div
                   className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                     isRunning ? 'bg-ok' : 'bg-err'
@@ -43,14 +43,14 @@ export default function ContainerStatus() {
                 <span className="font-mono text-txt-2 truncate flex-1">
                   {c.name}
                 </span>
-                <span className={`text-2xs ${isRunning ? 'text-txt-3' : 'text-err'}`}>
+                <span className={`text-xs ${isRunning ? 'text-txt-3' : 'text-err'}`}>
                   {c.status}
                 </span>
               </div>
             );
           })
         ) : (
-          <div className="px-3 py-4 text-xs text-txt-3 text-center">
+          <div className="px-3 py-4 text-sm text-txt-3 text-center">
             Waiting for container data...
           </div>
         )}

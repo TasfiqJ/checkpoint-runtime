@@ -132,7 +132,7 @@ export default function DemoWalkthrough({ currentStep, runState, elapsedSinceKil
       >
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-3">
-          <span className={`text-2xs font-bold ${TEXT[content.color]}`}>Step {content.step}</span>
+          <span className={`text-xs font-bold ${TEXT[content.color]}`}>Step {content.step}</span>
           <div className="flex-1 h-1 bg-surface-3/50 rounded-full overflow-hidden">
             <motion.div
               className={`h-full rounded-full ${content.color === 'ok' ? 'bg-ok' : content.color === 'err' ? 'bg-err' : content.color === 'recover' ? 'bg-recover' : content.color === 'info' ? 'bg-info' : 'bg-warn'}`}
@@ -171,15 +171,15 @@ export default function DemoWalkthrough({ currentStep, runState, elapsedSinceKil
               <div className="bg-surface-1/60 rounded-lg px-3.5 py-3 border border-info/20">
                 <div className="flex items-center gap-1.5 mb-2">
                   <span className="w-2 h-2 rounded-full bg-info" />
-                  <span className="text-2xs font-bold text-info uppercase tracking-wider">Saved</span>
+                  <span className="text-xs font-bold text-info uppercase tracking-wider">Saved</span>
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-2xs text-txt-3">Step</span>
+                    <span className="text-xs text-txt-3">Step</span>
                     <span className="text-sm font-mono font-bold text-txt-1">{recoverySummary.restoredStep}</span>
                   </div>
                   <div className="flex justify-between items-baseline">
-                    <span className="text-2xs text-txt-3">Loss</span>
+                    <span className="text-xs text-txt-3">Loss</span>
                     <span className="text-sm font-mono font-bold text-txt-1">{recoverySummary.checkpointLoss.toFixed(4)}</span>
                   </div>
                 </div>
@@ -189,15 +189,15 @@ export default function DemoWalkthrough({ currentStep, runState, elapsedSinceKil
               <div className="bg-surface-1/60 rounded-lg px-3.5 py-3 border border-ok/20">
                 <div className="flex items-center gap-1.5 mb-2">
                   <span className="w-2 h-2 rounded-full bg-ok" />
-                  <span className="text-2xs font-bold text-ok uppercase tracking-wider">Restored</span>
+                  <span className="text-xs font-bold text-ok uppercase tracking-wider">Restored</span>
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-2xs text-txt-3">Step</span>
+                    <span className="text-xs text-txt-3">Step</span>
                     <span className="text-sm font-mono font-bold text-txt-1">{recoverySummary.restoredStep}</span>
                   </div>
                   <div className="flex justify-between items-baseline">
-                    <span className="text-2xs text-txt-3">Loss</span>
+                    <span className="text-xs text-txt-3">Loss</span>
                     <span className="text-sm font-mono font-bold text-txt-1">{recoverySummary.checkpointLoss.toFixed(4)}</span>
                   </div>
                 </div>
@@ -206,7 +206,7 @@ export default function DemoWalkthrough({ currentStep, runState, elapsedSinceKil
 
             {/* Proof explanation */}
             <div className="bg-surface-1/40 rounded-lg px-3.5 py-2.5 border border-line/30">
-              <p className="text-xs text-txt-2 leading-relaxed">
+              <p className="text-sm text-txt-2 leading-relaxed">
                 <span className="text-ok font-semibold">Same step, same loss.</span>{' '}
                 The model was restored to the exact state it was saved at.
                 If the checkpoint had failed, loss would reset to{' '}

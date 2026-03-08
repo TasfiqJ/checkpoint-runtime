@@ -78,12 +78,12 @@ export default function VisitorStats() {
           {data.countries.map((c) => (
             <span
               key={c.country_code}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-surface-3 rounded text-[11px] text-txt-2"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-surface-3 rounded text-xs text-txt-2"
               title={`${c.country}: ${c.count}`}
             >
               <span className="text-sm">{c.flag}</span>
               {c.count > 1 && (
-                <span className="text-2xs text-txt-3">{c.count}</span>
+                <span className="text-xs text-txt-3">{c.count}</span>
               )}
             </span>
           ))}

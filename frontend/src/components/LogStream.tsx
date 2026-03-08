@@ -77,13 +77,13 @@ export default function LogStream({ active }: { active: boolean }) {
         {active && lines.length > 0 && (
           <div className="ml-auto flex items-center gap-1">
             <div className="w-1.5 h-1.5 rounded-full bg-ok animate-pulse" />
-            <span className="text-2xs text-txt-3">streaming</span>
+            <span className="text-xs text-txt-3">streaming</span>
           </div>
         )}
       </div>
 
       <div className="px-3.5 py-2 border-b border-line-subtle">
-        <p className="text-2xs text-txt-3 leading-relaxed">
+        <p className="text-xs text-txt-3 leading-relaxed">
           Real-time output from Docker containers. Look for{' '}
           <span className="text-txt-2 font-medium">checkpoint committed</span>,{' '}
           <span className="text-txt-2 font-medium">heartbeat timeout</span>, and{' '}
@@ -94,7 +94,7 @@ export default function LogStream({ active }: { active: boolean }) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="bg-surface-0 font-mono text-[11px] leading-relaxed max-h-72 overflow-y-auto p-2.5 space-y-px"
+        className="bg-surface-0 font-mono text-xs leading-relaxed max-h-72 overflow-y-auto p-2.5 space-y-px"
       >
         {lines.length === 0 ? (
           <div className="text-txt-3 text-center py-6">
@@ -132,7 +132,7 @@ export default function LogStream({ active }: { active: boolean }) {
               containerRef.current.scrollTop = containerRef.current.scrollHeight;
             }
           }}
-          className="w-full py-1.5 text-2xs text-brand-violet bg-surface-2 hover:bg-surface-3 border-t border-line-subtle transition-colors cursor-pointer"
+          className="w-full py-1.5 text-xs text-brand-violet bg-surface-2 hover:bg-surface-3 border-t border-line-subtle transition-colors cursor-pointer"
         >
           Scroll to latest logs
         </button>

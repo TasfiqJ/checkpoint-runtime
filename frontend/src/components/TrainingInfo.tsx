@@ -17,14 +17,14 @@ export default function TrainingInfo() {
         ].map((layer, i, arr) => (
           <div key={i} className="flex items-center gap-1">
             <div className="flex flex-col items-center">
-              <div className={`px-2 py-1 rounded-md text-2xs font-mono font-semibold border ${
+              <div className={`px-2 py-1 rounded-md text-xs font-mono font-semibold border ${
                 i === 0 ? 'border-info/30 bg-info-muted text-info' :
                 i === arr.length - 1 ? 'border-ok/30 bg-ok-muted text-ok' :
                 'border-line bg-surface-2 text-txt-2'
               }`}>
                 {layer.dim}
               </div>
-              <span className="text-[8px] text-txt-3 mt-0.5">{layer.label}</span>
+              <span className="text-2xs text-txt-3 mt-0.5">{layer.label}</span>
             </div>
             {i < arr.length - 1 && (
               <svg className="w-3 h-3 text-txt-3 flex-shrink-0 -mt-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -46,13 +46,13 @@ export default function TrainingInfo() {
           { label: 'Ckpt interval', value: '50 steps' },
         ].map(({ label, value }) => (
           <div key={label} className="py-1">
-            <p className="text-2xs text-txt-3">{label}</p>
-            <p className="text-xs font-semibold text-txt-1">{value}</p>
+            <p className="text-xs text-txt-3">{label}</p>
+            <p className="text-sm font-semibold text-txt-1">{value}</p>
           </div>
         ))}
       </div>
 
-      <p className="text-2xs text-txt-3 mt-2 leading-relaxed">
+      <p className="text-xs text-txt-3 mt-2 leading-relaxed">
         A real MLP neural network training on synthetic MNIST-like data using PyTorch Distributed Data Parallel across 2 CPU workers.
       </p>
     </div>

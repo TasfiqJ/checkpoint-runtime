@@ -46,14 +46,14 @@ export default function ActivityFeed() {
       </div>
 
       <div className="px-3.5 py-2 border-b border-line-subtle">
-        <p className="text-2xs text-txt-3 leading-relaxed">
+        <p className="text-xs text-txt-3 leading-relaxed">
           Recent visitor activity and kill events from people using this demo around the world.
         </p>
       </div>
 
       <div className="max-h-48 overflow-y-auto">
         {items.length === 0 ? (
-          <div className="px-3 py-4 text-xs text-txt-3 text-center">
+          <div className="px-3 py-4 text-sm text-txt-3 text-center">
             No activity yet...
           </div>
         ) : (
@@ -61,11 +61,11 @@ export default function ActivityFeed() {
             {items.slice(0, 15).map((item, i) => (
               <div
                 key={`${item.timestamp}-${i}`}
-                className="flex items-start gap-2 px-3.5 py-2 text-[11px]"
+                className="flex items-start gap-2 px-3.5 py-2 text-xs"
               >
                 <span className="text-sm flex-shrink-0 mt-px">{item.flag}</span>
                 <span className="text-txt-2 flex-1">{item.message}</span>
-                <span className="text-2xs text-txt-3 flex-shrink-0 whitespace-nowrap">
+                <span className="text-xs text-txt-3 flex-shrink-0 whitespace-nowrap">
                   {timeAgo(item.timestamp)}
                 </span>
               </div>

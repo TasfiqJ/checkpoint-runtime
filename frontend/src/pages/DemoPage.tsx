@@ -636,7 +636,7 @@ export default function DemoPage() {
         <div className="card p-5">
           <div className="mb-4">
             <h3 className="text-base font-bold text-txt-1">Training Workers</h3>
-            <p className="text-xs text-txt-3 mt-1">
+            <p className="text-sm text-txt-3 mt-1">
               Each worker is a real Docker container running PyTorch.{' '}
               <span className="text-err font-medium">Click "Kill" to shut one down</span> and the system will detect the failure and recover.
             </p>
@@ -654,7 +654,7 @@ export default function DemoPage() {
                 <span className="text-2xl flex-shrink-0 animate-bounce">{remoteKillBanner.flag}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-err">{remoteKillBanner.message}</p>
-                  <p className="text-xs text-txt-3 mt-0.5">Watch the system detect the failure and auto-recover below</p>
+                  <p className="text-sm text-txt-3 mt-0.5">Watch the system detect the failure and auto-recover below</p>
                 </div>
                 <button
                   onClick={() => showRemoteKillBanner(null)}
@@ -708,11 +708,11 @@ export default function DemoPage() {
                       />
                       <div>
                         <p className="text-sm font-semibold text-txt-1">Worker {idx}</p>
-                        <p className="text-2xs text-txt-3 font-mono">{container}</p>
+                        <p className="text-xs text-txt-3 font-mono">{container}</p>
                       </div>
                     </div>
                     {worker && (
-                      <span className="text-xs text-txt-3 font-mono">
+                      <span className="text-sm text-txt-3 font-mono">
                         Step {worker.current_step}
                       </span>
                     )}
@@ -760,7 +760,7 @@ export default function DemoPage() {
                     )}
                   </button>
                   {isAlive && killing === null && (
-                    <p className="text-2xs text-txt-3 text-center mt-2">
+                    <p className="text-xs text-txt-3 text-center mt-2">
                       Sends <code className="bg-surface-3 px-1 rounded font-mono">docker kill</code> to the real container
                     </p>
                   )}
@@ -806,10 +806,10 @@ export default function DemoPage() {
             <div className="card p-4">
               <div className="mb-3">
                 <h3 className="text-base font-bold text-txt-1">Event Timeline</h3>
-                <p className="text-xs text-txt-3 mt-0.5">Every state change and checkpoint is logged here in real-time</p>
+                <p className="text-sm text-txt-3 mt-0.5">Every state change and checkpoint is logged here in real-time</p>
               </div>
               {timeline.length === 0 ? (
-                <p className="text-xs text-txt-3">Events will appear here as they happen...</p>
+                <p className="text-sm text-txt-3">Events will appear here as they happen...</p>
               ) : (
                 <div className="space-y-1.5 max-h-56 overflow-y-auto">
                   {timeline.map((event, i) => (
@@ -817,10 +817,10 @@ export default function DemoPage() {
                       key={i}
                       className={`flex items-start gap-2 px-2.5 py-1.5 rounded-md border-l-2 ${EVENT_COLORS[event.type]}`}
                     >
-                      <span className="text-2xs font-mono text-txt-3 whitespace-nowrap mt-0.5">
+                      <span className="text-xs font-mono text-txt-3 whitespace-nowrap mt-0.5">
                         +{(event.time / 1000).toFixed(1)}s
                       </span>
-                      <span className="text-xs">{event.label}</span>
+                      <span className="text-sm">{event.label}</span>
                     </div>
                   ))}
                 </div>
@@ -832,7 +832,7 @@ export default function DemoPage() {
               <div className="card p-4">
                 <div className="mb-3">
                   <h3 className="text-base font-bold text-txt-1">Checkpoint History</h3>
-                  <p className="text-xs text-txt-3 mt-0.5">
+                  <p className="text-sm text-txt-3 mt-0.5">
                     Each row is a save point, the AI model's state backed up to S3 storage
                   </p>
                 </div>
@@ -844,9 +844,9 @@ export default function DemoPage() {
                     >
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="w-1.5 h-1.5 rounded-full bg-info" />
-                        <span className="text-xs text-txt-2">Step {cp.step}</span>
+                        <span className="text-sm text-txt-2">Step {cp.step}</span>
                       </div>
-                      <div className="flex items-center gap-2 sm:gap-3 text-2xs text-txt-3 flex-shrink-0">
+                      <div className="flex items-center gap-2 sm:gap-3 text-xs text-txt-3 flex-shrink-0">
                         <span className="hidden sm:inline">{cp.num_shards} shard{cp.num_shards !== 1 ? 's' : ''}</span>
                         <span>{formatBytes(cp.total_bytes)}</span>
                         <span className="font-mono">{shortId(cp.checkpoint_id, 8)}</span>
@@ -861,7 +861,7 @@ export default function DemoPage() {
             <div className="card p-4">
               <div className="mb-3">
                 <h3 className="text-base font-bold text-txt-1">Explore the Build</h3>
-                <p className="text-xs text-txt-3 mt-0.5">Dig deeper into the infrastructure behind this demo</p>
+                <p className="text-sm text-txt-3 mt-0.5">Dig deeper into the infrastructure behind this demo</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <Link to="/runs" className="flex items-center gap-3 px-3 py-3 rounded-lg bg-surface-2 hover:bg-surface-3 transition-colors group">
@@ -872,7 +872,7 @@ export default function DemoPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Training Runs</p>
-                    <p className="text-2xs text-txt-3">Run lifecycle + state transitions</p>
+                    <p className="text-xs text-txt-3">Run lifecycle + state transitions</p>
                   </div>
                   <svg className="w-4 h-4 text-txt-3 group-hover:text-brand-violet transition-colors ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -886,7 +886,7 @@ export default function DemoPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Checkpoint Browser</p>
-                    <p className="text-2xs text-txt-3">Shards + SHA-256 manifests</p>
+                    <p className="text-xs text-txt-3">Shards + SHA-256 manifests</p>
                   </div>
                   <svg className="w-4 h-4 text-txt-3 group-hover:text-brand-violet transition-colors ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -900,7 +900,7 @@ export default function DemoPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">System Health</p>
-                    <p className="text-2xs text-txt-3">Worker heartbeats + failure detection</p>
+                    <p className="text-xs text-txt-3">Worker heartbeats + failure detection</p>
                   </div>
                   <svg className="w-4 h-4 text-txt-3 group-hover:text-brand-violet transition-colors ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -914,7 +914,7 @@ export default function DemoPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Performance Metrics</p>
-                    <p className="text-2xs text-txt-3">Latency + throughput stats</p>
+                    <p className="text-xs text-txt-3">Latency + throughput stats</p>
                   </div>
                   <svg className="w-4 h-4 text-txt-3 group-hover:text-brand-violet transition-colors ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -927,8 +927,8 @@ export default function DemoPage() {
           {/* ─── Right Column: Proof Panels ─── */}
           <div className="w-full lg:w-[380px] lg:flex-shrink-0 space-y-3">
             <div className="card px-4 py-3">
-              <p className="text-xs font-semibold text-txt-1 mb-1">Proof Panels</p>
-              <p className="text-2xs text-txt-3 leading-relaxed">
+              <p className="text-sm font-semibold text-txt-1 mb-1">Proof Panels</p>
+              <p className="text-xs text-txt-3 leading-relaxed">
                 Everything below is live data from the real server, not animations or mock data.
               </p>
             </div>

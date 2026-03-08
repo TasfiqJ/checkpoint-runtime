@@ -18,7 +18,7 @@ export default function CheckpointProof({ checkpointMarkers }: Props) {
 
       {!latest ? (
         <div className="px-3.5 py-4">
-          <p className="text-xs text-txt-3 text-center">No checkpoints yet...</p>
+          <p className="text-sm text-txt-3 text-center">No checkpoints yet...</p>
         </div>
       ) : (
         <AnimatePresence mode="wait">
@@ -30,7 +30,7 @@ export default function CheckpointProof({ checkpointMarkers }: Props) {
             className="px-3.5 py-3 space-y-2.5"
           >
             {/* Key metrics grid */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-txt-3">Step</span>
                 <span className="font-mono font-semibold text-txt-1">{latest.step}</span>
@@ -51,12 +51,12 @@ export default function CheckpointProof({ checkpointMarkers }: Props) {
 
             {/* SHA-256 hash */}
             <div className="bg-surface-2 rounded-md px-2.5 py-1.5">
-              <p className="text-2xs text-txt-3 mb-0.5">SHA-256</p>
-              <p className="font-mono text-2xs text-txt-2 break-all">{latest.sha256}</p>
+              <p className="text-xs text-txt-3 mb-0.5">SHA-256</p>
+              <p className="font-mono text-xs text-txt-2 break-all">{latest.sha256}</p>
             </div>
 
             {/* Explanation */}
-            <p className="text-2xs text-txt-3 leading-relaxed">
+            <p className="text-xs text-txt-3 leading-relaxed">
               Contains 202K model parameters serialized as PyTorch tensors. The SHA-256 hash proves
               data integrity — if even one bit changed, the hash would be completely different.
             </p>
