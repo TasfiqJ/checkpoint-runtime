@@ -50,6 +50,17 @@
 }
 
 @layer base {
+  /* Scale everything up on larger screens — mobile stays at browser default (16px) */
+  html {
+    font-size: 16px;
+  }
+  @media (min-width: 1024px) {
+    html { font-size: 17px; }
+  }
+  @media (min-width: 1536px) {
+    html { font-size: 18px; }
+  }
+
   body {
     @apply bg-surface-0 text-txt-1 antialiased;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
