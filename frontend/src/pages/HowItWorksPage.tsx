@@ -100,7 +100,7 @@ export default function HowItWorksPage() {
 }
 buffer = io.BytesIO()
 torch.save(state, buffer)
-shard_data = buffer.getvalue()  # raw bytes, ~2.5 MB`}</CodeBlock>
+shard_data = buffer.getvalue()  # raw bytes, ~3.8 MB`}</CodeBlock>
         </Step>
 
         <Step n={2} title="Worker tells the control plane: 'start a checkpoint'">
@@ -124,7 +124,7 @@ Response: {"checkpoint_id": "ckpt-a1b2c3d4"}`}</CodeBlock>
           </P>
           <CodeBlock>{`POST /api/runs/{run_id}/checkpoints/{checkpoint_id}/shards/rank-0
 Content-Type: application/octet-stream
-Body: <2.5 MB of raw bytes>`}</CodeBlock>
+Body: <3.8 MB of raw bytes>`}</CodeBlock>
           <P>
             The control plane doesn't store these bytes. It immediately forwards them to
             the Rust data plane over gRPC using <Strong>streaming</Strong>. The bytes are split into
@@ -157,7 +157,7 @@ let hash = sha256(all_chunks);
 let storage_key = format!(
     "{run_id}/{checkpoint_id}/sha256-{hash_prefix}-{shard_id}.bin"
 );
-// Example: "run-xyz/ckpt-a1b2/sha256-a1b2c3d4e5f6-rank-0.bin"
+// Example: "run-xyz/ckpt-a1b2/sha256-a1b2c3d4e5f6a7b8-rank-0.bin"
 
 s3_client.put_object(bucket, storage_key, bytes).await?;
 
@@ -185,12 +185,12 @@ s3_client.put_object(bucket, storage_key, bytes).await?;
     "step": 100,
     "created_at": "2026-03-06T14:35:42Z",
     "num_shards": 1,
-    "total_bytes": 2567890,
+    "total_bytes": 3985408,
     "shards": [{
         "shard_id": "rank-0",
-        "size_bytes": 2567890,
-        "sha256": "a1b2c3d4e5f6g7h8...",
-        "storage_key": "run-xyz/ckpt-a1b2/sha256-a1b2c3d4e5f6-rank-0.bin"
+        "size_bytes": 3985408,
+        "sha256": "a1b2c3d4e5f6a7b8...",
+        "storage_key": "run-xyz/ckpt-a1b2/sha256-a1b2c3d4e5f6a7b8-rank-0.bin"
     }]
 }`}</CodeBlock>
           <P>
@@ -244,7 +244,7 @@ s3_client.put_object(bucket, storage_key, bytes).await?;
             Back when the kill happened, the control plane also scheduled an auto-restart:
           </P>
           <CodeBlock>{`async def _restart():
-    await asyncio.sleep(3)
+    await asyncio.sleep(5)
     subprocess.run(["docker", "start", "ckpt-worker-0"])
 
 asyncio.create_task(_restart())`}</CodeBlock>
@@ -280,7 +280,7 @@ if status.state in ("FAILED", "RECOVERING"):
 -> [{checkpoint_id: "ckpt-a1b2", step: 100, state: "COMMITTED"}, ...]
 
 GET /api/runs/{run_id}/checkpoints/ckpt-a1b2/shards/rank-0
--> <2.5 MB of raw bytes>  (fetched from MinIO via Rust data plane)`}</CodeBlock>
+-> <3.8 MB of raw bytes>  (fetched from MinIO via Rust data plane)`}</CodeBlock>
           <P>
             The worker deserializes the bytes back into PyTorch tensors:
           </P>
@@ -309,8 +309,8 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
           for example. Here are all the states:
         </P>
 
-        <div className="card overflow-hidden">
-          <table className="w-full text-xs">
+        <div className="card overflow-x-auto">
+          <table className="w-full text-xs min-w-[500px]">
             <thead>
               <tr className="border-b border-line">
                 <th className="table-header">State</th>
@@ -322,10 +322,10 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
               {[
                 ['CREATED', 'Run registered, not started yet', 'RUNNING, CANCELLED'],
                 ['RUNNING', 'Training is actively happening', 'CHECKPOINTING, FAILED, COMPLETED, CANCELLED'],
-                ['CHECKPOINTING', 'Saving model bytes to storage', 'COMMITTED, FAILED'],
-                ['COMMITTED', 'Checkpoint saved successfully', 'RUNNING, FAILED'],
+                ['CHECKPOINTING', 'Saving model bytes to storage', 'COMMITTED, FAILED, RUNNING'],
+                ['COMMITTED', 'Checkpoint saved successfully', 'RUNNING, COMPLETED, FAILED'],
                 ['FAILED', 'Worker died or heartbeat timed out', 'RECOVERING, CANCELLED'],
-                ['RECOVERING', 'Loading checkpoint, about to resume', 'RUNNING, FAILED'],
+                ['RECOVERING', 'Loading checkpoint, about to resume', 'RUNNING, FAILED, CANCELLED'],
                 ['COMPLETED', 'Training finished all steps (terminal)', 'none'],
                 ['CANCELLED', 'Manually stopped (terminal)', 'none'],
               ].map(([state, meaning, next]) => (
@@ -388,16 +388,16 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
         <CodeBlock>{`checkpoints/
 └── run-abc123/
     ├── ckpt-001/
-    │   ├── sha256-a1b2c3d4e5f6-rank-0.bin   (2.4 MB, model weights)
-    │   ├── rank-0.sha256                      (64 bytes, checksum)
-    │   └── _manifest.json                     (commit proof)
+    │   ├── sha256-a1b2c3d4e5f6a7b8-rank-0.bin  (3.8 MB, model weights)
+    │   ├── rank-0.sha256                         (64 bytes, checksum)
+    │   └── _manifest.json                        (commit proof)
     └── ckpt-002/
-        ├── sha256-f7g8h9i0j1k2-rank-0.bin   (2.4 MB)
+        ├── sha256-f7e8d9c0b1a2f3e4-rank-0.bin  (3.8 MB)
         ├── rank-0.sha256
         └── _manifest.json`}</CodeBlock>
         <P>
           The <Code>.bin</Code> files contain the actual model weights. The filename includes
-          the first 12 characters of the SHA-256 hash of the contents. The <Code>.sha256</Code> file
+          the first 16 characters of the SHA-256 hash of the contents. The <Code>.sha256</Code> file
           contains the full 64-character hash for verification. The <Code>_manifest.json</Code> is
           the commit record that proves the checkpoint completed successfully.
         </P>
@@ -465,8 +465,8 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
         <P>
           Everything runs in Docker Compose. Here's every single container:
         </P>
-        <div className="card overflow-hidden">
-          <table className="w-full text-xs">
+        <div className="card overflow-x-auto">
+          <table className="w-full text-xs min-w-[500px]">
             <thead>
               <tr className="border-b border-line">
                 <th className="table-header">Container</th>
@@ -484,7 +484,7 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
                 ['ckpt-worker-1', '--', 'PyTorch DDP worker rank 1 (trains in parallel)'],
                 ['ckpt-frontend', '3000', 'React dashboard and this page you\'re reading'],
                 ['ckpt-otel', '4317', 'OpenTelemetry Collector, receives and routes telemetry'],
-                ['ckpt-prometheus', '9090', 'Time-series database for metrics'],
+                ['ckpt-prometheus', '9091', 'Time-series database for metrics'],
                 ['ckpt-grafana', '3001', 'Dashboard UI for metrics visualization'],
                 ['ckpt-jaeger', '16686', 'Distributed tracing UI'],
               ].map(([name, port, desc]) => (

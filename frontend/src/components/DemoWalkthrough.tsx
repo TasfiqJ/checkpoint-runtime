@@ -16,6 +16,7 @@ interface WalkthroughContent {
   title: string;
   body: string;
   action?: string;
+  elapsed?: number | null;
   color: 'ok' | 'info' | 'err' | 'recover' | 'warn';
 }
 
@@ -44,7 +45,8 @@ function getContent(
       return {
         step: '2/3',
         title: 'Crash Detected!',
-        body: `The worker stopped sending heartbeats. The system noticed it's gone${elapsed !== null ? ` (${elapsed.toFixed(1)}s ago)` : ''}. Recovery is about to start — the system will restart the container and load the last saved checkpoint from storage.`,
+        body: `The worker stopped sending heartbeats. The system noticed it's gone. Recovery is about to start — the system will restart the container and load the last saved checkpoint from storage.`,
+        elapsed,
         color: 'err',
       };
     }
@@ -52,7 +54,8 @@ function getContent(
       return {
         step: '2/3',
         title: 'Recovering...',
-        body: `The crashed worker is restarting. It's loading the last saved checkpoint from object storage right now${elapsed !== null ? ` (${elapsed.toFixed(1)}s since kill)` : ''}. When it finishes, training will resume from the exact step it was saved at — no work lost.`,
+        body: `The crashed worker is restarting. It's loading the last saved checkpoint from object storage right now. When it finishes, training will resume from the exact step it was saved at — no work lost.`,
+        elapsed,
         color: 'recover',
       };
     }
@@ -61,7 +64,8 @@ function getContent(
     return {
       step: '2/3',
       title: 'Crash Detected!',
-      body: `The kill signal was just sent to the worker container${elapsed !== null ? ` (${elapsed.toFixed(1)}s ago)` : ''}. Waiting for the system to detect the failure and begin recovery...`,
+      body: `The kill signal was just sent to the worker container. Waiting for the system to detect the failure and begin recovery...`,
+      elapsed,
       color: 'err',
     };
   }
@@ -138,10 +142,20 @@ export default function DemoWalkthrough({ currentStep, runState, elapsedSinceKil
           </div>
         </div>
 
-        {/* Title */}
-        <h3 className={`text-lg font-bold mb-1 ${TEXT[content.color]}`}>
-          {content.title}
-        </h3>
+        {/* Title + Timer */}
+        <div className="flex items-center gap-3 mb-1 flex-wrap">
+          <h3 className={`text-lg font-bold ${TEXT[content.color]}`}>
+            {content.title}
+          </h3>
+          {content.elapsed !== undefined && content.elapsed !== null && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warn/15 border border-warn/30 text-warn font-mono text-sm font-bold tabular-nums animate-pulse">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {content.elapsed.toFixed(1)}s
+            </span>
+          )}
+        </div>
 
         {/* Body */}
         <p className="text-sm text-txt-2 leading-relaxed">

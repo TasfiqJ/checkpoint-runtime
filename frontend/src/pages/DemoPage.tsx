@@ -532,25 +532,70 @@ export default function DemoPage() {
           </div>
         </div>
 
-        {/* Dashboard links */}
+        {/* Explore the Build */}
         <div className="border-t border-line pt-10">
-          <p className="text-xs font-semibold text-txt-3 uppercase tracking-widest mb-4 text-center">Operator Dashboard</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Link to="/runs" className="card px-4 py-3 text-center hover:shadow-glow-sm transition-shadow group">
-              <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Training Runs</p>
-              <p className="text-xs text-txt-3 mt-0.5">Run lifecycle + state</p>
+          <h2 className="text-2xl font-bold text-txt-1 text-center mb-2">
+            Explore the Build
+          </h2>
+          <p className="text-base text-txt-3 text-center mb-6">
+            Dig deeper into the infrastructure behind this demo
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Link to="/runs" className="card px-5 py-5 flex items-center gap-4 hover:shadow-glow-sm hover:border-brand-violet/30 transition-all group">
+              <div className="w-11 h-11 rounded-xl bg-ok-muted flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-ok" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-base font-bold text-txt-1 group-hover:text-brand-violet transition-colors">Training Runs</p>
+                <p className="text-sm text-txt-3 mt-0.5">Run lifecycle, state machine transitions, and step history</p>
+              </div>
+              <svg className="w-5 h-5 text-txt-3 group-hover:text-brand-violet transition-colors ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </Link>
-            <Link to="/checkpoints" className="card px-4 py-3 text-center hover:shadow-glow-sm transition-shadow group">
-              <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Checkpoint Browser</p>
-              <p className="text-xs text-txt-3 mt-0.5">Shards + manifests</p>
+            <Link to="/checkpoints" className="card px-5 py-5 flex items-center gap-4 hover:shadow-glow-sm hover:border-brand-violet/30 transition-all group">
+              <div className="w-11 h-11 rounded-xl bg-info-muted flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-info" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-base font-bold text-txt-1 group-hover:text-brand-violet transition-colors">Checkpoint Browser</p>
+                <p className="text-sm text-txt-3 mt-0.5">Shard files, SHA-256 manifests, and storage layout</p>
+              </div>
+              <svg className="w-5 h-5 text-txt-3 group-hover:text-brand-violet transition-colors ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </Link>
-            <Link to="/health" className="card px-4 py-3 text-center hover:shadow-glow-sm transition-shadow group">
-              <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">System Health</p>
-              <p className="text-xs text-txt-3 mt-0.5">Worker heartbeats</p>
+            <Link to="/health" className="card px-5 py-5 flex items-center gap-4 hover:shadow-glow-sm hover:border-brand-violet/30 transition-all group">
+              <div className="w-11 h-11 rounded-xl bg-recover-muted flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-recover" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-base font-bold text-txt-1 group-hover:text-brand-violet transition-colors">System Health</p>
+                <p className="text-sm text-txt-3 mt-0.5">Worker heartbeats, lease TTLs, and failure detection</p>
+              </div>
+              <svg className="w-5 h-5 text-txt-3 group-hover:text-brand-violet transition-colors ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </Link>
-            <Link to="/performance" className="card px-4 py-3 text-center hover:shadow-glow-sm transition-shadow group">
-              <p className="text-sm font-semibold text-txt-1 group-hover:text-brand-violet transition-colors">Performance Metrics</p>
-              <p className="text-xs text-txt-3 mt-0.5">Latency + throughput</p>
+            <Link to="/performance" className="card px-5 py-5 flex items-center gap-4 hover:shadow-glow-sm hover:border-brand-violet/30 transition-all group">
+              <div className="w-11 h-11 rounded-xl bg-warn-muted flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-warn" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-base font-bold text-txt-1 group-hover:text-brand-violet transition-colors">Performance Metrics</p>
+                <p className="text-sm text-txt-3 mt-0.5">Checkpoint latency, throughput, and backpressure stats</p>
+              </div>
+              <svg className="w-5 h-5 text-txt-3 group-hover:text-brand-violet transition-colors ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </Link>
           </div>
         </div>

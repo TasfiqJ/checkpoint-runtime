@@ -100,7 +100,6 @@ export default function TryLocallyPage() {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="w-[800px] h-[500px] bg-brand-violet/[0.07] rounded-full blur-[120px]" />
         </div>
-        <div className="absolute inset-0 bg-grid opacity-60" />
 
         <div className="relative max-w-4xl mx-auto px-5 pt-8 md:pt-24 pb-16 text-center">
           <p className="text-sm font-semibold text-brand-violet uppercase tracking-widest mb-6">
