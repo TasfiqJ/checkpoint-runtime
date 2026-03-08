@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import LandingPage from './pages/LandingPage';
@@ -25,11 +25,20 @@ const mobileNavItems = [
 function App() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const scrollPositions = useRef<Record<string, number>>({});
+  const prevPath = useRef(location.pathname);
 
-  // Close mobile menu + scroll to top on navigation
+  // Save scroll position before leaving, restore when arriving
   useEffect(() => {
+    // Save scroll position of the page we're leaving
+    scrollPositions.current[prevPath.current] = window.scrollY;
+    prevPath.current = location.pathname;
+
     setMenuOpen(false);
-    window.scrollTo(0, 0);
+
+    // Restore saved position or scroll to top for new pages
+    const saved = scrollPositions.current[location.pathname];
+    window.scrollTo(0, saved ?? 0);
   }, [location.pathname]);
 
   // Lock body scroll when menu is open
