@@ -32,7 +32,7 @@ function getContent(
   if (walkthroughStep >= 3) {
     if (runState === 'FAILED') {
       return {
-        step: '3/4',
+        step: '2/3',
         title: 'Crash Detected!',
         body: `The worker stopped sending heartbeats. The system noticed it's gone${elapsed !== null ? ` (${elapsed.toFixed(1)}s ago)` : ''}. Recovery is about to start — the system will restart the container and load the last saved checkpoint from storage.`,
         color: 'err',
@@ -40,7 +40,7 @@ function getContent(
     }
     if (runState === 'RECOVERING') {
       return {
-        step: '3/4',
+        step: '2/3',
         title: 'Recovering...',
         body: `The crashed worker is restarting. It's loading the last saved checkpoint from object storage right now${elapsed !== null ? ` (${elapsed.toFixed(1)}s since kill)` : ''}. When it finishes, training will resume from the exact step it was saved at — no work lost.`,
         color: 'recover',
@@ -49,28 +49,18 @@ function getContent(
   }
 
   // Pre-kill walkthrough steps
-  if (walkthroughStep === 2) {
+  if (walkthroughStep >= 1) {
     return {
-      step: '2/4',
-      title: 'Now Crash a Server',
-      body: 'The system has saved enough checkpoints. Click the red "Kill This Server" button below to destroy one of the training workers. This sends a real docker kill command to the container on the server.',
-      action: 'Click "Kill This Server" on either worker below',
-      color: 'err',
-    };
-  }
-
-  if (walkthroughStep === 1) {
-    return {
-      step: '1/4',
+      step: '1/3',
       title: 'Checkpoints Are Being Saved',
-      body: 'Every 50 training steps, the system saves a snapshot of the entire model — all 202K parameters, the optimizer state, and the current step. Look at the loss chart: the blue dots are checkpoints. Wait for 2 checkpoints before crashing a server.',
+      body: 'Every 50 training steps, the system saves a snapshot of the entire model — all 202K parameters, the optimizer state, and the current step. The blue dots on the loss chart are checkpoints. Kill a worker above whenever you\'re ready.',
       color: 'info',
     };
   }
 
   // Step 0: just started
   return {
-    step: '1/4',
+    step: '1/3',
     title: 'Training Has Started',
     body: 'Two real Docker containers are training a neural network together right now. Watch the loss chart — the green line going down means the model is learning. Checkpoints will start saving automatically every 50 steps.',
     color: 'ok',
@@ -106,7 +96,7 @@ interface Props {
 
 export default function DemoWalkthrough({ currentStep, runState, elapsedSinceKill, recoverySummary }: Props) {
   const content = getContent(currentStep, runState, elapsedSinceKill, recoverySummary);
-  const progressPct = recoverySummary ? 100 : currentStep >= 3 ? 75 : currentStep >= 2 ? 50 : currentStep >= 1 ? 25 : 10;
+  const progressPct = recoverySummary ? 100 : currentStep >= 3 ? 66 : currentStep >= 1 ? 33 : 10;
 
   return (
     <AnimatePresence mode="wait">

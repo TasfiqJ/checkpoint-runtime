@@ -538,6 +538,119 @@ export default function DemoPage() {
         />
       )}
 
+      {/* Workers + Kill Buttons — right at the top */}
+      {runId && run && (
+        <div className="card p-5">
+          <div className="mb-4">
+            <h3 className="text-base font-bold text-txt-1">Training Workers</h3>
+            <p className="text-xs text-txt-3 mt-1">
+              Each worker is a real Docker container running PyTorch.{' '}
+              <span className="text-err font-medium">Click "Kill" to shut one down</span> and the system will detect the failure and recover.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {['ckpt-worker-0', 'ckpt-worker-1'].map((container, idx) => {
+              const worker = relevantWorkers[idx];
+              const isAlive = worker?.status === 'ACTIVE';
+              const isDead = !isAlive && hasKilled;
+              const isRecovering = isDead && run.state === 'RECOVERING';
+              const dotColor = WORKER_DOT[worker?.status ?? 'DEAD'] ?? 'bg-muted';
+
+              return (
+                <motion.div
+                  key={container}
+                  animate={
+                    workerShake === container
+                      ? { x: [0, -10, 10, -8, 8, -4, 4, 0] }
+                      : { x: 0 }
+                  }
+                  transition={{ duration: 0.5 }}
+                  className={`card px-4 py-4 transition-all duration-500 ${
+                    isDead && !isRecovering
+                      ? 'opacity-50 border-err/30 bg-err-muted/10'
+                      : isRecovering
+                      ? 'border-recover/30 bg-recover-muted/10'
+                      : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <motion.span
+                        className={`w-2.5 h-2.5 rounded-full ${dotColor}`}
+                        animate={
+                          isRecovering
+                            ? { scale: [1, 1.4, 1], opacity: [1, 0.4, 1] }
+                            : isDead
+                            ? { scale: 1, opacity: 0.4 }
+                            : { scale: 1, opacity: 1 }
+                        }
+                        transition={isRecovering ? { duration: 1, repeat: Infinity } : { duration: 0.3 }}
+                      />
+                      <div>
+                        <p className="text-sm font-semibold text-txt-1">Worker {idx}</p>
+                        <p className="text-2xs text-txt-3 font-mono">{container}</p>
+                      </div>
+                    </div>
+                    {worker && (
+                      <span className="text-xs text-txt-3 font-mono">
+                        Step {worker.current_step}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Kill / Status Button */}
+                  <button
+                    onClick={() => handleKillWorker(container)}
+                    disabled={killing !== null || !isAlive}
+                    className={`w-full py-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
+                      isAlive && killing === null
+                        ? 'bg-err/15 text-err hover:bg-err/25 border border-err/30 hover:border-err/50'
+                        : killing === container
+                        ? 'bg-err/20 text-err border border-err/40 cursor-wait'
+                        : isRecovering
+                        ? 'bg-recover/10 text-recover border border-recover/20 cursor-not-allowed'
+                        : 'bg-surface-3 text-txt-3 border border-line cursor-not-allowed'
+                    }`}
+                  >
+                    {killing === container ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Sending docker kill...
+                      </span>
+                    ) : isRecovering ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-recover animate-pulse" />
+                        Recovering...
+                      </span>
+                    ) : !isAlive ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-err" />
+                        Worker Down
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                        Kill This Server
+                      </span>
+                    )}
+                  </button>
+                  {isAlive && killing === null && (
+                    <p className="text-2xs text-txt-3 text-center mt-2">
+                      Sends <code className="bg-surface-3 px-1 rounded font-mono">docker kill</code> to the real container
+                    </p>
+                  )}
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {runId && run && (
         <div className="flex flex-col lg:flex-row gap-4">
           {/* ─── Left Column: Main Demo ─── */}
@@ -567,117 +680,6 @@ export default function DemoPage() {
                 value={`${workers.filter(w => w.status === 'ACTIVE').length}/2`}
                 hint="Servers currently training"
               />
-            </div>
-
-            {/* Workers + Kill Buttons */}
-            <div className="card p-5">
-              <div className="mb-4">
-                <h3 className="text-base font-bold text-txt-1">Training Workers</h3>
-                <p className="text-xs text-txt-3 mt-1">
-                  Each worker is a real Docker container running PyTorch.{' '}
-                  <span className="text-err font-medium">Click "Kill" to shut one down</span> and the system will detect the failure and recover.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {['ckpt-worker-0', 'ckpt-worker-1'].map((container, idx) => {
-                  const worker = relevantWorkers[idx];
-                  const isAlive = worker?.status === 'ACTIVE';
-                  const isDead = !isAlive && hasKilled;
-                  const isRecovering = isDead && run.state === 'RECOVERING';
-                  const dotColor = WORKER_DOT[worker?.status ?? 'DEAD'] ?? 'bg-muted';
-
-                  return (
-                    <motion.div
-                      key={container}
-                      animate={
-                        workerShake === container
-                          ? { x: [0, -10, 10, -8, 8, -4, 4, 0] }
-                          : { x: 0 }
-                      }
-                      transition={{ duration: 0.5 }}
-                      className={`card px-4 py-4 transition-all duration-500 ${
-                        isDead && !isRecovering
-                          ? 'opacity-50 border-err/30 bg-err-muted/10'
-                          : isRecovering
-                          ? 'border-recover/30 bg-recover-muted/10'
-                          : ''
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2.5">
-                          <motion.span
-                            className={`w-2.5 h-2.5 rounded-full ${dotColor}`}
-                            animate={
-                              isRecovering
-                                ? { scale: [1, 1.4, 1], opacity: [1, 0.4, 1] }
-                                : isDead
-                                ? { scale: 1, opacity: 0.4 }
-                                : { scale: 1, opacity: 1 }
-                            }
-                            transition={isRecovering ? { duration: 1, repeat: Infinity } : { duration: 0.3 }}
-                          />
-                          <div>
-                            <p className="text-sm font-semibold text-txt-1">Worker {idx}</p>
-                            <p className="text-2xs text-txt-3 font-mono">{container}</p>
-                          </div>
-                        </div>
-                        {worker && (
-                          <span className="text-xs text-txt-3 font-mono">
-                            Step {worker.current_step}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Kill / Status Button */}
-                      <button
-                        onClick={() => handleKillWorker(container)}
-                        disabled={killing !== null || !isAlive}
-                        className={`w-full py-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
-                          isAlive && killing === null
-                            ? 'bg-err/15 text-err hover:bg-err/25 border border-err/30 hover:border-err/50'
-                            : killing === container
-                            ? 'bg-err/20 text-err border border-err/40 cursor-wait'
-                            : isRecovering
-                            ? 'bg-recover/10 text-recover border border-recover/20 cursor-not-allowed'
-                            : 'bg-surface-3 text-txt-3 border border-line cursor-not-allowed'
-                        }`}
-                      >
-                        {killing === container ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                            </svg>
-                            Sending docker kill...
-                          </span>
-                        ) : isRecovering ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-recover animate-pulse" />
-                            Recovering...
-                          </span>
-                        ) : !isAlive ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-err" />
-                            Worker Down
-                          </span>
-                        ) : (
-                          <span className="flex items-center justify-center gap-2">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                            </svg>
-                            Kill This Server
-                          </span>
-                        )}
-                      </button>
-                      {isAlive && killing === null && (
-                        <p className="text-2xs text-txt-3 text-center mt-2">
-                          Sends <code className="bg-surface-3 px-1 rounded font-mono">docker kill</code> to the real container
-                        </p>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
             </div>
 
             {/* Event Timeline */}
