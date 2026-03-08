@@ -124,6 +124,7 @@ export default function DemoPage() {
     recoverTime: number;
     restoredStep: number;
     currentStep: number;
+    checkpointLoss: number;
   } | null>(null);
   const [workerShake, setWorkerShake] = useState<string | null>(null);
   const [killStep, setKillStep] = useState<number | null>(null);
@@ -134,6 +135,7 @@ export default function DemoPage() {
   const failDetectedTimeRef = useRef<number>(0);
   const recoveryStartTimeRef = useRef<number>(0);
   const lastCheckpointStepRef = useRef<number>(0);
+  const lastCheckpointLossRef = useRef<number>(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Parse loss / checkpoint / recovery data from live log stream
@@ -202,6 +204,7 @@ export default function DemoPage() {
                   recoverTime: (now - killTimeRef.current) / 1000,
                   restoredStep: lastCheckpointStepRef.current,
                   currentStep: data.current_step,
+                  checkpointLoss: lastCheckpointLossRef.current,
                 });
                 setTimeout(() => setRecoverySummary(null), 15000);
               }
@@ -292,6 +295,10 @@ export default function DemoPage() {
     killTimeRef.current = Date.now();
     failDetectedTimeRef.current = 0;
     recoveryStartTimeRef.current = 0;
+
+    // Capture last checkpoint loss for recovery proof
+    const lastCp = checkpointMarkers.length > 0 ? checkpointMarkers[checkpointMarkers.length - 1] : null;
+    lastCheckpointLossRef.current = lastCp?.loss ?? 0;
 
     // Trigger shake animation
     setWorkerShake(containerName);
