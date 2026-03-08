@@ -66,9 +66,9 @@ function StateMachinePipeline({ currentState, hasKilled }: { currentState: RunSt
           return (
             <div key={i} className="flex items-center gap-1 flex-1">
               {/* Node */}
-              <div className="flex flex-col items-center gap-1 min-w-[60px]">
+              <div className="flex flex-col items-center gap-1 min-w-[48px] sm:min-w-[60px]">
                 <motion.div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-[9px] font-bold
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[9px] font-bold
                     ${isActive ? `${colors.bg} text-surface-0 ring-4 ${colors.ring}` : isPast ? `${colors.bg}/30 ${colors.text}` : 'bg-surface-3 text-txt-3'}`}
                   animate={isActive ? { scale: [1, 1.15, 1] } : { scale: 1 }}
                   transition={isActive ? { duration: 1.5, repeat: Infinity, ease: 'easeInOut' } : {}}
@@ -769,14 +769,14 @@ export default function DemoPage() {
                   {committedCheckpoints.slice(-8).reverse().map(cp => (
                     <div
                       key={cp.checkpoint_id}
-                      className="flex items-center justify-between px-2.5 py-1.5 bg-surface-2 rounded-md"
+                      className="flex items-center justify-between px-2.5 py-1.5 bg-surface-2 rounded-md gap-2"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="w-1.5 h-1.5 rounded-full bg-info" />
                         <span className="text-xs text-txt-2">Step {cp.step}</span>
                       </div>
-                      <div className="flex items-center gap-3 text-2xs text-txt-3">
-                        <span>{cp.num_shards} shard{cp.num_shards !== 1 ? 's' : ''}</span>
+                      <div className="flex items-center gap-2 sm:gap-3 text-2xs text-txt-3 flex-shrink-0">
+                        <span className="hidden sm:inline">{cp.num_shards} shard{cp.num_shards !== 1 ? 's' : ''}</span>
                         <span>{formatBytes(cp.total_bytes)}</span>
                         <span className="font-mono">{shortId(cp.checkpoint_id, 8)}</span>
                       </div>

@@ -194,7 +194,7 @@ function App() {
       </div>
 
       {/* ─── Content ─── */}
-      <main className={`flex-1 ${isLanding ? '' : 'pt-10 md:pt-20 max-w-[1400px] mx-auto w-full px-5 py-6'}`}>
+      <main className={`flex-1 ${isLanding ? '' : 'pt-20 max-w-[1400px] mx-auto w-full px-4 sm:px-5 py-6'}`}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />

@@ -150,7 +150,7 @@ export default function TrainingLossChart({
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-2 text-2xs text-txt-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-2xs text-txt-3">
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 rounded-full bg-[#10b981]" /> Loss
         </span>
