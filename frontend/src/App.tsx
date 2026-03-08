@@ -9,17 +9,20 @@ import HealthPage from './pages/HealthPage';
 import PerformancePage from './pages/PerformancePage';
 import DemoPage from './pages/DemoPage';
 import HowItWorksPage from './pages/HowItWorksPage';
+import TryLocallyPage from './pages/TryLocallyPage';
 import ThemeToggle from './components/ThemeToggle';
 
 const desktopNavItems = [
   { to: '/how-it-works', label: 'How It Works', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
   { to: '/demo', label: 'Live Demo', highlight: true, icon: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z' },
+  { to: '/try-locally', label: 'Try Locally', icon: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
 ];
 
 const mobileNavItems = [
   { to: '/', label: 'Home' },
   { to: '/how-it-works', label: 'How It Works' },
   { to: '/demo', label: 'Live Demo' },
+  { to: '/try-locally', label: 'Try Locally' },
 ];
 
 function App() {
@@ -199,6 +202,7 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/demo" element={<DemoPage />} />
+          <Route path="/try-locally" element={<TryLocallyPage />} />
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
           <Route path="/checkpoints" element={<CheckpointBrowser />} />
