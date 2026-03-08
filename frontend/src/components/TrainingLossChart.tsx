@@ -129,7 +129,7 @@ export default function TrainingLossChart({
               );
             })()}
 
-            {/* Recovery markers (orange) */}
+            {/* Recovery markers (purple) */}
             {recoveryMarkers.map((rm) => {
               const loss = findLoss(rm.step);
               if (loss === null) return null;
@@ -139,8 +139,8 @@ export default function TrainingLossChart({
                   x={rm.step}
                   y={loss}
                   r={6}
-                  fill="#f97316"
-                  stroke="#7c2d12"
+                  fill="#8b5cf6"
+                  stroke="#4c1d95"
                   strokeWidth={1}
                 />
               );
@@ -164,7 +164,7 @@ export default function TrainingLossChart({
         )}
         {recoveryMarkers.length > 0 && (
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-[#f97316]" /> Recovery
+            <span className="w-2 h-2 rounded-full bg-[#8b5cf6]" /> Recovery
           </span>
         )}
       </div>
