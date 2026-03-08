@@ -137,9 +137,6 @@ function App() {
             <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
           <span>About Me</span>
-          <svg className="w-2.5 h-2.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-          </svg>
         </a>
 
         <ThemeToggle />
@@ -244,9 +241,6 @@ function App() {
                         className="text-[2.75rem] leading-tight font-serif font-light text-txt-3 hover:text-txt-1 transition-colors flex items-center gap-3"
                       >
                         About Me
-                        <svg className="w-5 h-5 opacity-40 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                        </svg>
                       </a>
                     </motion.div>
                   </div>
