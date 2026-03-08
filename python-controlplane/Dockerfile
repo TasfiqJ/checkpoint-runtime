@@ -22,7 +22,7 @@ COPY python-controlplane/src/ ./src/
 COPY proto/ /app/proto/
 
 # Install the package (non-editable for Docker)
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[cloud]"
 
 ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
