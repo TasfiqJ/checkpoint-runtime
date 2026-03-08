@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { RunStatus, RunState, WorkerInfo, CheckpointInfo } from '../types';
 import { API_BASE } from '../config/api';
 import ContainerStatus from '../components/ContainerStatus';
@@ -128,6 +128,7 @@ export default function DemoPage() {
   } | null>(null);
   const [workerShake, setWorkerShake] = useState<string | null>(null);
   const [killStep, setKillStep] = useState<number | null>(null);
+  const [remoteKillBanner, setRemoteKillBanner] = useState<{ flag: string; message: string } | null>(null);
   const prevStateRef = useRef<RunState | null>(null);
   const startTimeRef = useRef<number>(0);
   const checkpointCountRef = useRef<number>(0);
@@ -179,6 +180,42 @@ export default function DemoPage() {
             // Track timestamps for recovery metrics
             if (data.state === 'FAILED') {
               failDetectedTimeRef.current = Date.now();
+
+              // Someone ELSE killed the workers — show a fun banner
+              if (!hasKilledRef.current) {
+                // Trigger shake on both workers
+                setWorkerShake('ckpt-worker-0');
+                setTimeout(() => setWorkerShake(null), 600);
+
+                // Fetch activity feed to get who did it
+                fetch(`${API_BASE}/api/demo/activity`)
+                  .then(r => r.ok ? r.json() : null)
+                  .then(feed => {
+                    const killEvent = feed?.activity?.find(
+                      (a: { message: string }) => a.message.includes('killed'),
+                    );
+                    if (killEvent) {
+                      setRemoteKillBanner({
+                        flag: killEvent.flag || '\u{1F525}',
+                        message: killEvent.message,
+                      });
+                    } else {
+                      setRemoteKillBanner({
+                        flag: '\u{1F525}',
+                        message: 'Someone just killed a worker! Watch it recover...',
+                      });
+                    }
+                    // Auto-dismiss after 15s
+                    setTimeout(() => setRemoteKillBanner(null), 15000);
+                  })
+                  .catch(() => {
+                    setRemoteKillBanner({
+                      flag: '\u{1F525}',
+                      message: 'Someone just killed a worker! Watch it recover...',
+                    });
+                    setTimeout(() => setRemoteKillBanner(null), 15000);
+                  });
+              }
             }
             if (data.state === 'RECOVERING') {
               recoveryStartTimeRef.current = Date.now();
@@ -188,6 +225,12 @@ export default function DemoPage() {
             // Use hasKilledRef (immediate) to avoid stale closure from React state batching
             if ((data.state === 'FAILED' || data.state === 'RECOVERING') && hasKilledRef.current) {
               setWalkthroughStep(3);
+            }
+
+            // Dismiss remote kill banner when recovery completes
+            if (data.state === 'RUNNING' &&
+                (prevStateRef.current === 'RECOVERING' || prevStateRef.current === 'FAILED')) {
+              setRemoteKillBanner(null);
             }
 
             // Show recovery success banner + recovery summary + walkthrough advance
@@ -575,11 +618,38 @@ export default function DemoPage() {
               <span className="text-err font-medium">Click "Kill" to shut one down</span> and the system will detect the failure and recover.
             </p>
           </div>
+          {/* Remote kill banner — someone else killed the workers */}
+          <AnimatePresence>
+            {remoteKillBanner && (
+              <motion.div
+                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                className="mb-3 px-4 py-3 rounded-xl bg-err/10 border border-err/30 flex items-center gap-3"
+              >
+                <span className="text-2xl flex-shrink-0 animate-bounce">{remoteKillBanner.flag}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-err">{remoteKillBanner.message}</p>
+                  <p className="text-xs text-txt-3 mt-0.5">Watch the system detect the failure and auto-recover below</p>
+                </div>
+                <button
+                  onClick={() => setRemoteKillBanner(null)}
+                  className="text-txt-3 hover:text-txt-1 flex-shrink-0 cursor-pointer"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {['ckpt-worker-0', 'ckpt-worker-1'].map((container, idx) => {
               const worker = relevantWorkers[idx];
               const isAlive = worker?.status === 'ACTIVE';
-              const isDead = !isAlive && hasKilled;
+              const isDead = !isAlive && (hasKilled || remoteKillBanner !== null || run.state === 'FAILED' || run.state === 'RECOVERING');
               const isRecovering = isDead && run.state === 'RECOVERING';
               const dotColor = WORKER_DOT[worker?.status ?? 'DEAD'] ?? 'bg-muted';
 
