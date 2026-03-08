@@ -148,7 +148,7 @@ export default function DemoWalkthrough({ currentStep, runState, elapsedSinceKil
             {content.title}
           </h3>
           {content.elapsed !== undefined && content.elapsed !== null && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warn/15 border border-warn/30 text-warn font-mono text-sm font-bold tabular-nums animate-pulse">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-3/60 border border-line/40 text-txt-1 font-mono text-sm font-bold tabular-nums animate-pulse">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
