@@ -134,6 +134,7 @@ export default function DemoPage() {
   const killTimeRef = useRef<number>(0);
   const failDetectedTimeRef = useRef<number>(0);
   const recoveryStartTimeRef = useRef<number>(0);
+  const hasKilledRef = useRef(false);
   const lastCheckpointStepRef = useRef<number>(0);
   const lastCheckpointLossRef = useRef<number>(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -184,12 +185,13 @@ export default function DemoPage() {
             }
 
             // Walkthrough auto-advance: failure or recovery detected
-            if ((data.state === 'FAILED' || data.state === 'RECOVERING') && hasKilled) {
+            // Use hasKilledRef (immediate) to avoid stale closure from React state batching
+            if ((data.state === 'FAILED' || data.state === 'RECOVERING') && hasKilledRef.current) {
               setWalkthroughStep(3);
             }
 
             // Show recovery success banner + recovery summary + walkthrough advance
-            if (data.state === 'RUNNING' && hasKilled && !recoverySummary &&
+            if (data.state === 'RUNNING' && hasKilledRef.current && !recoverySummary &&
                 (prevStateRef.current === 'RECOVERING' || prevStateRef.current === 'FAILED')) {
               // Stop elapsed timer
               if (elapsedTimerRef.current) {
@@ -201,10 +203,13 @@ export default function DemoPage() {
               // Build recovery summary with real timing
               if (killTimeRef.current > 0) {
                 const now = Date.now();
+                const detectMs = failDetectedTimeRef.current > 0
+                  ? failDetectedTimeRef.current - killTimeRef.current
+                  : (recoveryStartTimeRef.current > 0
+                    ? recoveryStartTimeRef.current - killTimeRef.current
+                    : 1000); // fallback ~1s if we missed both FAILED and RECOVERING
                 setRecoverySummary({
-                  detectTime: failDetectedTimeRef.current > 0
-                    ? (failDetectedTimeRef.current - killTimeRef.current) / 1000
-                    : 0,
+                  detectTime: detectMs / 1000,
                   recoverTime: (now - killTimeRef.current) / 1000,
                   restoredStep: lastCheckpointStepRef.current,
                   currentStep: data.current_step,
@@ -213,7 +218,7 @@ export default function DemoPage() {
                 setTimeout(() => setRecoverySummary(null), 30000);
               }
 
-              if (hasKilled) {
+              if (hasKilledRef.current) {
                 setWalkthroughStep(4);
               }
             }
@@ -256,6 +261,7 @@ export default function DemoPage() {
     setStarting(true);
     setTimeline([]);
     setWalkthroughStep(0);
+    hasKilledRef.current = false;
     setHasKilled(false);
     startTimeRef.current = Date.now();
     prevStateRef.current = null;
@@ -293,8 +299,10 @@ export default function DemoPage() {
   // Kill worker
   const handleKillWorker = async (containerName: string) => {
     setKilling(containerName);
-    setHasKilled(true);
+    hasKilledRef.current = true;          // Immediate — poll closures see this instantly
+    setHasKilled(true);                   // React state — for re-renders / deps
     setRecoverySummary(null);
+    setWalkthroughStep(3);                // Immediately advance narrator to "Crash Detected!"
     setKillStep(run?.current_step ?? null);
     killTimeRef.current = Date.now();
     failDetectedTimeRef.current = 0;

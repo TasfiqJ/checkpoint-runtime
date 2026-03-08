@@ -56,6 +56,14 @@ function getContent(
         color: 'recover',
       };
     }
+    // Fallback: kill just happened, state hasn't caught up to FAILED yet (poll lag)
+    // Show "Crash Detected!" while waiting for the server to confirm the failure
+    return {
+      step: '2/3',
+      title: 'Crash Detected!',
+      body: `The kill signal was just sent to the worker container${elapsed !== null ? ` (${elapsed.toFixed(1)}s ago)` : ''}. Waiting for the system to detect the failure and begin recovery...`,
+      color: 'err',
+    };
   }
 
   // Pre-kill walkthrough steps
