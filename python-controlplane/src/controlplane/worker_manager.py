@@ -127,6 +127,15 @@ class WorkerManager:
             logger.warning("Worker %s not found in coordinator during heartbeat", worker_id)
             return None
 
+        # Propagate max step to the run so RunStatus.current_step stays current
+        if step > 0:
+            try:
+                run_status = self._coordinator.get_run(worker.run_id)
+                if run_status is not None and step > run_status.current_step:
+                    self._coordinator.update_run_step(worker.run_id, step)
+            except Exception:
+                pass  # Don't fail heartbeat if run step update fails
+
         # Update heartbeat lease
         if self._heartbeat_mgr is not None:
             self._heartbeat_mgr.record_heartbeat(worker_id, step)

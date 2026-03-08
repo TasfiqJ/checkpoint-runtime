@@ -1196,6 +1196,19 @@ def _register_routes(application: FastAPI) -> None:
                 except Exception as exc:
                     logger.warning("Kill endpoint: could not fail run %s: %s", demo_run_id, exc)
 
+                # Mark old workers as DEAD in WorkerManager + Coordinator
+                worker_mgr = _get_worker_mgr(request)
+                if worker_mgr:
+                    for wid in list(worker_mgr._workers):
+                        w = worker_mgr._workers.get(wid)
+                        if w and w.run_id == demo_run_id and w.status == "ACTIVE":
+                            w.status = "DEAD"
+                            try:
+                                coord.mark_worker_dead(demo_run_id, wid)
+                            except Exception:
+                                pass
+                    logger.info("Marked old workers DEAD for run %s", demo_run_id)
+
                 # Clear old worker leases so HeartbeatManager won't re-trigger
                 # RecoveryManager at the 15s dead_threshold
                 heartbeat_mgr: HeartbeatManager = request.app.state.heartbeat_mgr
