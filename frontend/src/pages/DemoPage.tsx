@@ -129,6 +129,7 @@ export default function DemoPage() {
   const [workerShake, setWorkerShake] = useState<string | null>(null);
   const [killStep, setKillStep] = useState<number | null>(null);
   const [remoteKillBanner, setRemoteKillBanner] = useState<{ flag: string; message: string } | null>(null);
+  const remoteKillBannerRef = useRef<{ flag: string; message: string } | null>(null);
   const prevStateRef = useRef<RunState | null>(null);
   const startTimeRef = useRef<number>(0);
   const checkpointCountRef = useRef<number>(0);
@@ -151,8 +152,16 @@ export default function DemoPage() {
     }]);
   }, []);
 
+  // Helper to set remote kill banner (both state + ref so poll closures see it immediately)
+  const showRemoteKillBanner = useCallback((banner: { flag: string; message: string } | null) => {
+    remoteKillBannerRef.current = banner;
+    setRemoteKillBanner(banner);
+  }, []);
+
   // Poll run status — fast (750ms) during kill/recovery, normal (2s) otherwise
-  const isRecovering = hasKilled && !recoverySummary;
+  // Poll faster during kill/recovery — for both local kills and remote kills
+  const isInFailureState = run?.state === 'FAILED' || run?.state === 'RECOVERING';
+  const isRecovering = (hasKilled && !recoverySummary) || (isInFailureState && !hasKilledRef.current);
   const pollInterval = isRecovering ? 750 : 2000;
 
   useEffect(() => {
@@ -180,45 +189,46 @@ export default function DemoPage() {
             // Track timestamps for recovery metrics
             if (data.state === 'FAILED') {
               failDetectedTimeRef.current = Date.now();
-
-              // Someone ELSE killed the workers — show a fun banner
-              if (!hasKilledRef.current) {
-                // Trigger shake on both workers
-                setWorkerShake('ckpt-worker-0');
-                setTimeout(() => setWorkerShake(null), 600);
-
-                // Fetch activity feed to get who did it
-                fetch(`${API_BASE}/api/demo/activity`)
-                  .then(r => r.ok ? r.json() : null)
-                  .then(feed => {
-                    const killEvent = feed?.activity?.find(
-                      (a: { message: string }) => a.message.includes('killed'),
-                    );
-                    if (killEvent) {
-                      setRemoteKillBanner({
-                        flag: killEvent.flag || '\u{1F525}',
-                        message: killEvent.message,
-                      });
-                    } else {
-                      setRemoteKillBanner({
-                        flag: '\u{1F525}',
-                        message: 'Someone just killed a worker! Watch it recover...',
-                      });
-                    }
-                    // Auto-dismiss after 15s
-                    setTimeout(() => setRemoteKillBanner(null), 15000);
-                  })
-                  .catch(() => {
-                    setRemoteKillBanner({
-                      flag: '\u{1F525}',
-                      message: 'Someone just killed a worker! Watch it recover...',
-                    });
-                    setTimeout(() => setRemoteKillBanner(null), 15000);
-                  });
-              }
             }
             if (data.state === 'RECOVERING') {
               recoveryStartTimeRef.current = Date.now();
+            }
+
+            // Someone ELSE killed the workers — show a fun banner
+            // Trigger on FAILED or RECOVERING (poll may miss brief FAILED state)
+            if ((data.state === 'FAILED' || data.state === 'RECOVERING') && !hasKilledRef.current && !remoteKillBannerRef.current) {
+              // Trigger shake on both workers
+              setWorkerShake('ckpt-worker-0');
+              setTimeout(() => setWorkerShake(null), 600);
+
+              // Fetch activity feed to get who did it
+              fetch(`${API_BASE}/api/demo/activity`)
+                .then(r => r.ok ? r.json() : null)
+                .then(feed => {
+                  const killEvent = feed?.activity?.find(
+                    (a: { message: string }) => a.message.includes('killed'),
+                  );
+                  if (killEvent) {
+                    showRemoteKillBanner({
+                      flag: killEvent.flag || '🔥',
+                      message: killEvent.message,
+                    });
+                  } else {
+                    showRemoteKillBanner({
+                      flag: '🔥',
+                      message: 'Someone just killed a worker! Watch it recover...',
+                    });
+                  }
+                  // Auto-dismiss after 15s
+                  setTimeout(() => showRemoteKillBanner(null), 15000);
+                })
+                .catch(() => {
+                  showRemoteKillBanner({
+                    flag: '🔥',
+                    message: 'Someone just killed a worker! Watch it recover...',
+                  });
+                  setTimeout(() => showRemoteKillBanner(null), 15000);
+                });
             }
 
             // Walkthrough auto-advance: failure or recovery detected
@@ -230,7 +240,7 @@ export default function DemoPage() {
             // Dismiss remote kill banner when recovery completes
             if (data.state === 'RUNNING' &&
                 (prevStateRef.current === 'RECOVERING' || prevStateRef.current === 'FAILED')) {
-              setRemoteKillBanner(null);
+              showRemoteKillBanner(null);
             }
 
             // Show recovery success banner + recovery summary + walkthrough advance
@@ -267,6 +277,19 @@ export default function DemoPage() {
             }
           }
           prevStateRef.current = data.state;
+
+          // Safety net: if we see FAILED/RECOVERING but missed the state transition,
+          // still show the remote kill banner for passive observers.
+          if ((data.state === 'FAILED' || data.state === 'RECOVERING') &&
+              !hasKilledRef.current && !remoteKillBannerRef.current) {
+            setWorkerShake('ckpt-worker-0');
+            setTimeout(() => setWorkerShake(null), 600);
+            showRemoteKillBanner({
+              flag: '🔥',
+              message: 'Someone just killed a worker! Watch it recover...',
+            });
+            setTimeout(() => showRemoteKillBanner(null), 15000);
+          }
 
           // Safety net: if recovery completed but we missed the state transition,
           // build the recovery summary anyway after a reasonable delay.
@@ -634,7 +657,7 @@ export default function DemoPage() {
                   <p className="text-xs text-txt-3 mt-0.5">Watch the system detect the failure and auto-recover below</p>
                 </div>
                 <button
-                  onClick={() => setRemoteKillBanner(null)}
+                  onClick={() => showRemoteKillBanner(null)}
                   className="text-txt-3 hover:text-txt-1 flex-shrink-0 cursor-pointer"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
