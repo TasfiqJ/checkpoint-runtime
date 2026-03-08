@@ -127,6 +127,21 @@ function App() {
           );
         })}
 
+        <a
+          href="https://www.tasfiqj.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl transition-all duration-200 text-txt-3 hover:text-txt-1 hover:bg-surface-3/60"
+        >
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          <span>About Me</span>
+          <svg className="w-2.5 h-2.5 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+          </svg>
+        </a>
+
         <ThemeToggle />
       </nav>
 
@@ -212,6 +227,28 @@ function App() {
                         </Link>
                       </motion.div>
                     ))}
+                    {/* External: About Me */}
+                    <motion.div
+                      custom={mobileNavItems.length}
+                      variants={LINK_SLIDE}
+                      initial="initial"
+                      animate="enter"
+                      exit="exit"
+                      className="relative flex items-center"
+                    >
+                      <a
+                        href="https://www.tasfiqj.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setMenuOpen(false)}
+                        className="text-[2.75rem] leading-tight font-serif font-light text-txt-3 hover:text-txt-1 transition-colors flex items-center gap-3"
+                      >
+                        About Me
+                        <svg className="w-5 h-5 opacity-40 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                        </svg>
+                      </a>
+                    </motion.div>
                   </div>
                 </div>
 
