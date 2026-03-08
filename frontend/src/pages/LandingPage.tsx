@@ -109,7 +109,7 @@ export default function LandingPage() {
             </Link>
             <Link
               to="/how-it-works"
-              className="cursor-pointer inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30"
+              className="cursor-pointer inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150 bg-teal-700/20 text-teal-300/80 hover:bg-teal-700/30 border border-teal-600/25"
             >
               How I Built It
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -294,7 +294,7 @@ export default function LandingPage() {
         <div className="mt-10 flex justify-center">
           <Link
             to="/how-it-works"
-            className="cursor-pointer inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg transition-colors duration-150 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30"
+            className="cursor-pointer inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg transition-colors duration-150 bg-teal-700/20 text-teal-300/80 hover:bg-teal-700/30 border border-teal-600/25"
           >
             Exhaustive Details
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
