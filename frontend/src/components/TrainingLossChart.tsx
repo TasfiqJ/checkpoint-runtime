@@ -65,7 +65,7 @@ export default function TrainingLossChart({
         <h4 className="panel-title">Training Loss</h4>
       </div>
       <p className="text-2xs text-txt-3 mt-1 mb-3">
-        Lower = the model is learning. Dots mark checkpoints (saves) and events.
+        Synthetic workload — loss shows training is progressing. Dots mark checkpoints and events.
       </p>
 
       <div className="h-[200px]">
