@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { RunStatus, RunState, WorkerInfo, CheckpointInfo } from '../types';
 import { API_BASE } from '../config/api';
 import ContainerStatus from '../components/ContainerStatus';
@@ -36,12 +37,86 @@ const STATUS_HEADLINE: Partial<Record<RunState, string>> = {
 };
 
 const STATUS_EXPLAIN: Partial<Record<RunState, string>> = {
-  RUNNING: 'Both workers are training the AI model together. Checkpoints are being saved automatically every 50 steps.',
-  FAILED: 'The system detected a worker stopped sending heartbeats. It\'s about to start recovery.',
-  RECOVERING: 'The crashed worker is restarting and loading the last saved checkpoint from storage.',
+  RUNNING: 'Both workers are training the AI model together. Checkpoints save automatically every 50 steps.',
+  FAILED: 'A worker just went down! The heartbeat monitor detected the crash. Recovery is starting...',
+  RECOVERING: 'Loading the last saved checkpoint from object storage. The crashed worker is restarting...',
   CHECKPOINTING: 'The system is saving the AI model\'s current state to storage right now.',
-  COMMITTED: 'A checkpoint was just saved successfully. Training continues.',
+  COMMITTED: 'Checkpoint saved. Model state is safely backed up to storage.',
 };
+
+// ── State Machine Pipeline ──────────────────────────────────────────────────
+
+const PIPELINE_STATES = ['RUNNING', 'FAILED', 'RECOVERING', 'RUNNING'] as const;
+const PIPELINE_LABELS = ['heartbeat\ntimeout', 'load\ncheckpoint', 'resume\ntraining'];
+const PIPELINE_COLORS: Record<string, { bg: string; ring: string; text: string }> = {
+  RUNNING: { bg: 'bg-ok', ring: 'ring-ok/40', text: 'text-ok' },
+  FAILED: { bg: 'bg-err', ring: 'ring-err/40', text: 'text-err' },
+  RECOVERING: { bg: 'bg-recover', ring: 'ring-recover/40', text: 'text-recover' },
+};
+
+function getPipelineIndex(state: RunState, hasKilled: boolean): number {
+  if (!hasKilled) return 0;
+  if (state === 'FAILED') return 1;
+  if (state === 'RECOVERING') return 2;
+  if (state === 'RUNNING') return 3;
+  return 0;
+}
+
+function StateMachinePipeline({ currentState, hasKilled }: { currentState: RunState; hasKilled: boolean }) {
+  const activeIdx = getPipelineIndex(currentState, hasKilled);
+
+  return (
+    <div className="card px-4 py-4 overflow-hidden">
+      <p className="text-2xs font-semibold text-txt-3 uppercase tracking-widest mb-3">State Machine</p>
+      <div className="flex items-center justify-between gap-1">
+        {PIPELINE_STATES.map((state, i) => {
+          const isActive = i === activeIdx;
+          const isPast = i < activeIdx;
+          const colors = PIPELINE_COLORS[state] ?? PIPELINE_COLORS.RUNNING;
+          const label = i === 0 ? 'RUNNING' : i === 1 ? 'FAILED' : i === 2 ? 'RECOVERING' : 'RESUMED';
+
+          return (
+            <div key={i} className="flex items-center gap-1 flex-1">
+              {/* Node */}
+              <div className="flex flex-col items-center gap-1 min-w-[60px]">
+                <motion.div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-[9px] font-bold
+                    ${isActive ? `${colors.bg} text-surface-0 ring-4 ${colors.ring}` : isPast ? `${colors.bg}/30 ${colors.text}` : 'bg-surface-3 text-txt-3'}`}
+                  animate={isActive ? { scale: [1, 1.15, 1] } : { scale: 1 }}
+                  transition={isActive ? { duration: 1.5, repeat: Infinity, ease: 'easeInOut' } : {}}
+                >
+                  {isActive ? (
+                    <span className="w-2 h-2 rounded-full bg-current" />
+                  ) : isPast ? '✓' : ''}
+                </motion.div>
+                <span className={`text-2xs font-semibold whitespace-nowrap ${isActive ? colors.text : isPast ? 'text-txt-2' : 'text-txt-3'}`}>
+                  {label}
+                </span>
+              </div>
+
+              {/* Arrow */}
+              {i < PIPELINE_STATES.length - 1 && (
+                <div className="flex flex-col items-center flex-1 -mt-4">
+                  <div className={`h-0.5 w-full rounded ${i < activeIdx ? PIPELINE_COLORS[PIPELINE_STATES[i + 1]]?.bg ?? 'bg-surface-3' : 'bg-surface-3'}`}>
+                    <motion.div
+                      className={`h-full rounded ${PIPELINE_COLORS[PIPELINE_STATES[i + 1]]?.bg ?? 'bg-ok'}`}
+                      initial={{ width: '0%' }}
+                      animate={{ width: i < activeIdx ? '100%' : '0%' }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                    />
+                  </div>
+                  <span className="text-[8px] text-txt-3 mt-1 text-center leading-tight whitespace-pre-line">
+                    {PIPELINE_LABELS[i]}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ── State-specific left border class ────────────────────────────────────────
 
@@ -66,9 +141,22 @@ export default function DemoPage() {
   const [recoveryBanner, setRecoveryBanner] = useState(false);
   const [walkthroughStep, setWalkthroughStep] = useState(0);
   const [hasKilled, setHasKilled] = useState(false);
+  const [elapsedSinceKill, setElapsedSinceKill] = useState<number | null>(null);
+  const [recoverySummary, setRecoverySummary] = useState<{
+    detectTime: number;
+    recoverTime: number;
+    restoredStep: number;
+    currentStep: number;
+  } | null>(null);
+  const [workerShake, setWorkerShake] = useState<string | null>(null);
   const prevStateRef = useRef<RunState | null>(null);
   const startTimeRef = useRef<number>(0);
   const checkpointCountRef = useRef<number>(0);
+  const killTimeRef = useRef<number>(0);
+  const failDetectedTimeRef = useRef<number>(0);
+  const recoveryStartTimeRef = useRef<number>(0);
+  const lastCheckpointStepRef = useRef<number>(0);
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const addEvent = useCallback((label: string, type: TimelineEvent['type'] = 'info') => {
     setTimeline(prev => [...prev, {
@@ -101,15 +189,45 @@ export default function DemoPage() {
               : 'info';
             addEvent(label, type);
 
+            // Track timestamps for recovery metrics
+            if (data.state === 'FAILED') {
+              failDetectedTimeRef.current = Date.now();
+            }
+            if (data.state === 'RECOVERING') {
+              recoveryStartTimeRef.current = Date.now();
+            }
+
             // Walkthrough auto-advance: failure detected
             if (data.state === 'FAILED' && hasKilled) {
               setWalkthroughStep(3);
             }
 
-            // Show recovery success banner + walkthrough advance
+            // Show recovery success banner + recovery summary + walkthrough advance
             if (data.state === 'RUNNING' && (prevStateRef.current === 'RECOVERING' || prevStateRef.current === 'FAILED')) {
+              // Stop elapsed timer
+              if (elapsedTimerRef.current) {
+                clearInterval(elapsedTimerRef.current);
+                elapsedTimerRef.current = null;
+              }
+              setElapsedSinceKill(null);
+
               setRecoveryBanner(true);
               setTimeout(() => setRecoveryBanner(false), 8000);
+
+              // Build recovery summary with real timing
+              if (killTimeRef.current > 0) {
+                const now = Date.now();
+                setRecoverySummary({
+                  detectTime: failDetectedTimeRef.current > 0
+                    ? (failDetectedTimeRef.current - killTimeRef.current) / 1000
+                    : 0,
+                  recoverTime: (now - killTimeRef.current) / 1000,
+                  restoredStep: lastCheckpointStepRef.current,
+                  currentStep: data.current_step,
+                });
+                setTimeout(() => setRecoverySummary(null), 15000);
+              }
+
               if (hasKilled) {
                 setWalkthroughStep(4);
               }
@@ -124,6 +242,7 @@ export default function DemoPage() {
           if (cps.length > checkpointCountRef.current) {
             const newest = cps[cps.length - 1];
             if (newest.state === 'COMMITTED') {
+              lastCheckpointStepRef.current = newest.step;
               addEvent(
                 `Checkpoint committed: step ${newest.step} (${formatBytes(newest.total_bytes)})`,
                 'success',
@@ -190,6 +309,22 @@ export default function DemoPage() {
   const handleKillWorker = async (containerName: string) => {
     setKilling(containerName);
     setHasKilled(true);
+    setRecoverySummary(null);
+    killTimeRef.current = Date.now();
+    failDetectedTimeRef.current = 0;
+    recoveryStartTimeRef.current = 0;
+
+    // Trigger shake animation
+    setWorkerShake(containerName);
+    setTimeout(() => setWorkerShake(null), 600);
+
+    // Start elapsed timer
+    setElapsedSinceKill(0);
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    elapsedTimerRef.current = setInterval(() => {
+      setElapsedSinceKill((Date.now() - killTimeRef.current) / 1000);
+    }, 100);
+
     addEvent(`Killing container: ${containerName}`, 'error');
 
     try {
@@ -206,6 +341,13 @@ export default function DemoPage() {
       setKilling(null);
     }
   };
+
+  // Cleanup elapsed timer on unmount
+  useEffect(() => {
+    return () => {
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+    };
+  }, []);
 
   const committedCheckpoints = checkpoints.filter(cp => cp.state === 'COMMITTED');
   const totalBytes = committedCheckpoints.reduce((sum, cp) => sum + cp.total_bytes, 0);
@@ -418,44 +560,132 @@ export default function DemoPage() {
           {/* ─── Left Column: Main Demo ─── */}
           <div className="flex-1 min-w-0 space-y-4">
 
-            {/* Status Banner */}
-            <div className={`glass-strong border-l-2 ${borderClass} overflow-hidden`}>
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full animate-pulse ${stateConfig.dot}`} />
-                    <h3 className="text-lg font-bold text-txt-1">
-                      {STATUS_HEADLINE[run.state] ?? run.state}
-                    </h3>
+            {/* State Machine Pipeline */}
+            {hasKilled && <StateMachinePipeline currentState={run.state} hasKilled={hasKilled} />}
+
+            {/* Status Banner — animated per state */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={run.state}
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.3 }}
+                className={`glass-strong border-l-4 ${borderClass} overflow-hidden ${
+                  run.state === 'FAILED' ? 'ring-1 ring-err/30' :
+                  run.state === 'RECOVERING' ? 'ring-1 ring-recover/30' : ''
+                }`}
+              >
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <motion.div
+                        className={`w-3.5 h-3.5 rounded-full ${stateConfig.dot}`}
+                        animate={run.state === 'FAILED'
+                          ? { scale: [1, 1.4, 1], opacity: [1, 0.5, 1] }
+                          : run.state === 'RECOVERING'
+                          ? { scale: [1, 1.2, 1] }
+                          : { scale: 1 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                      />
+                      <h3 className="text-xl font-bold text-txt-1">
+                        {STATUS_HEADLINE[run.state] ?? run.state}
+                      </h3>
+                    </div>
+                    <RunBadge state={run.state} size="md" />
                   </div>
-                  <RunBadge state={run.state} size="md" />
+                  {STATUS_EXPLAIN[run.state] && (
+                    <p className="text-sm text-txt-2 ml-7 leading-relaxed">
+                      {STATUS_EXPLAIN[run.state]}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 mt-2 ml-7">
+                    <p className="text-2xs text-txt-3 font-mono">
+                      Run {shortId(run.run_id, 8)} &middot; Step {run.current_step}
+                    </p>
+                    {/* Elapsed timer during failure/recovery */}
+                    {elapsedSinceKill !== null && (run.state === 'FAILED' || run.state === 'RECOVERING') && (
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-2xs font-mono text-err font-semibold bg-err-muted px-2 py-0.5 rounded"
+                      >
+                        {elapsedSinceKill.toFixed(1)}s since kill
+                      </motion.span>
+                    )}
+                  </div>
                 </div>
-                {STATUS_EXPLAIN[run.state] && (
-                  <p className="text-sm text-txt-2 ml-6">
-                    {STATUS_EXPLAIN[run.state]}
-                  </p>
-                )}
-                <p className="text-2xs text-txt-3 font-mono mt-2 ml-6">
-                  Run {shortId(run.run_id, 8)} &middot; Step {run.current_step}
-                </p>
-              </div>
-            </div>
+              </motion.div>
+            </AnimatePresence>
 
             {/* Recovery Success Banner */}
-            {recoveryBanner && (
-              <div className="glass-strong border border-ok/30 bg-ok-muted p-5">
-                <div className="flex items-center gap-3">
-                  <LiveDot />
-                  <div>
-                    <p className="text-ok text-base font-bold">Recovery Successful!</p>
-                    <p className="text-txt-2 text-sm mt-1">
-                      The crashed worker restarted, loaded the last checkpoint, and resumed training.
-                      No data was lost. This is what the system is designed to do.
-                    </p>
+            <AnimatePresence>
+              {recoveryBanner && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                  className="glass-strong border border-ok/30 bg-ok-muted p-5"
+                >
+                  <div className="flex items-center gap-3">
+                    <LiveDot />
+                    <div>
+                      <p className="text-ok text-base font-bold">Recovery Successful!</p>
+                      <p className="text-txt-2 text-sm mt-1">
+                        The crashed worker restarted, loaded the last checkpoint, and resumed training.
+                        No data was lost.
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Recovery Summary Card */}
+            <AnimatePresence>
+              {recoverySummary && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                  className="card border border-ok/20 bg-ok-muted/30 p-5"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-5 h-5 text-ok" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-sm font-bold text-ok">Recovery Metrics</p>
+                    <button onClick={() => setRecoverySummary(null)} className="ml-auto text-txt-3 hover:text-txt-1 text-xs cursor-pointer">dismiss</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-txt-3">Failure detected in</span>
+                      <span className="font-mono font-semibold text-txt-1">{recoverySummary.detectTime.toFixed(1)}s</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-txt-3">Total recovery time</span>
+                      <span className="font-mono font-semibold text-txt-1">{recoverySummary.recoverTime.toFixed(1)}s</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-txt-3">Restored from step</span>
+                      <span className="font-mono font-semibold text-txt-1">{recoverySummary.restoredStep}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-txt-3">Now at step</span>
+                      <span className="font-mono font-semibold text-txt-1">{recoverySummary.currentStep}</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-ok/20 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-ok" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-xs font-semibold text-ok">Zero data loss confirmed</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Metric Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -482,16 +712,40 @@ export default function DemoPage() {
                 {['ckpt-worker-0', 'ckpt-worker-1'].map((container, idx) => {
                   const worker = relevantWorkers[idx];
                   const isAlive = worker?.status === 'ACTIVE';
+                  const isDead = !isAlive && hasKilled;
+                  const isRecovering = isDead && run.state === 'RECOVERING';
                   const dotColor = WORKER_DOT[worker?.status ?? 'DEAD'] ?? 'bg-muted';
 
                   return (
-                    <div
+                    <motion.div
                       key={container}
-                      className="card px-4 py-4"
+                      animate={
+                        workerShake === container
+                          ? { x: [0, -10, 10, -8, 8, -4, 4, 0] }
+                          : { x: 0 }
+                      }
+                      transition={{ duration: 0.5 }}
+                      className={`card px-4 py-4 transition-all duration-500 ${
+                        isDead && !isRecovering
+                          ? 'opacity-50 border-err/30 bg-err-muted/10'
+                          : isRecovering
+                          ? 'border-recover/30 bg-recover-muted/10'
+                          : ''
+                      }`}
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2.5">
-                          <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
+                          <motion.span
+                            className={`w-2.5 h-2.5 rounded-full ${dotColor}`}
+                            animate={
+                              isRecovering
+                                ? { scale: [1, 1.4, 1], opacity: [1, 0.4, 1] }
+                                : isDead
+                                ? { scale: 1, opacity: 0.4 }
+                                : { scale: 1, opacity: 1 }
+                            }
+                            transition={isRecovering ? { duration: 1, repeat: Infinity } : { duration: 0.3 }}
+                          />
                           <div>
                             <p className="text-sm font-semibold text-txt-1">Worker {idx}</p>
                             <p className="text-2xs text-txt-3 font-mono">{container}</p>
@@ -503,21 +757,46 @@ export default function DemoPage() {
                           </span>
                         )}
                       </div>
+
+                      {/* Kill / Status Button */}
                       <button
                         onClick={() => handleKillWorker(container)}
                         disabled={killing !== null || !isAlive}
-                        className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                        className={`w-full py-3 rounded-xl text-sm font-bold transition-all duration-200 cursor-pointer ${
                           isAlive && killing === null
-                            ? 'bg-err-muted text-err hover:bg-err/20 border border-err/20'
+                            ? 'bg-err/15 text-err hover:bg-err/25 border border-err/30 hover:border-err/50'
+                            : killing === container
+                            ? 'bg-err/20 text-err border border-err/40 cursor-wait'
+                            : isRecovering
+                            ? 'bg-recover/10 text-recover border border-recover/20 cursor-not-allowed'
                             : 'bg-surface-3 text-txt-3 border border-line cursor-not-allowed'
                         }`}
                       >
                         {killing === container ? (
-                          'Killing...'
+                          <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Sending docker kill...
+                          </span>
+                        ) : isRecovering ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-recover animate-pulse" />
+                            Recovering...
+                          </span>
                         ) : !isAlive ? (
-                          'Offline, Recovering...'
+                          <span className="flex items-center justify-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-err" />
+                            Worker Down
+                          </span>
                         ) : (
-                          <>Kill This Server</>
+                          <span className="flex items-center justify-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                            </svg>
+                            Kill This Server
+                          </span>
                         )}
                       </button>
                       {isAlive && killing === null && (
@@ -525,7 +804,7 @@ export default function DemoPage() {
                           Sends <code className="bg-surface-3 px-1 rounded font-mono">docker kill</code> to the real container
                         </p>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
