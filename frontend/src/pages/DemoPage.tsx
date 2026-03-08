@@ -12,6 +12,10 @@ import VisitorStats from '../components/VisitorStats';
 import ActivityFeed from '../components/ActivityFeed';
 import { RUN_STATE_CONFIG, WORKER_DOT, formatBytes, shortId } from '../design';
 import { RunBadge, MetricCard, LiveDot } from '../components/ui';
+import { useLogParser } from '../hooks/useLogParser';
+import TrainingLossChart from '../components/TrainingLossChart';
+import CheckpointProof from '../components/CheckpointProof';
+import TrainingInfo from '../components/TrainingInfo';
 
 // ── Timeline event ──────────────────────────────────────────────────────────
 
@@ -149,6 +153,7 @@ export default function DemoPage() {
     currentStep: number;
   } | null>(null);
   const [workerShake, setWorkerShake] = useState<string | null>(null);
+  const [killStep, setKillStep] = useState<number | null>(null);
   const prevStateRef = useRef<RunState | null>(null);
   const startTimeRef = useRef<number>(0);
   const checkpointCountRef = useRef<number>(0);
@@ -157,6 +162,9 @@ export default function DemoPage() {
   const recoveryStartTimeRef = useRef<number>(0);
   const lastCheckpointStepRef = useRef<number>(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Parse loss / checkpoint / recovery data from live log stream
+  const { lossHistory, checkpointMarkers, recoveryMarkers } = useLogParser(!!runId);
 
   const addEvent = useCallback((label: string, type: TimelineEvent['type'] = 'info') => {
     setTimeline(prev => [...prev, {
@@ -310,6 +318,7 @@ export default function DemoPage() {
     setKilling(containerName);
     setHasKilled(true);
     setRecoverySummary(null);
+    setKillStep(run?.current_step ?? null);
     killTimeRef.current = Date.now();
     failDetectedTimeRef.current = 0;
     recoveryStartTimeRef.current = 0;
@@ -687,6 +696,17 @@ export default function DemoPage() {
               )}
             </AnimatePresence>
 
+            {/* Live Training Loss Chart */}
+            <TrainingLossChart
+              lossHistory={lossHistory}
+              checkpointMarkers={checkpointMarkers}
+              recoveryMarkers={recoveryMarkers}
+              killStep={killStep}
+            />
+
+            {/* Training Info */}
+            <TrainingInfo />
+
             {/* Metric Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <MetricCard label="Training Step" value={run.current_step} hint="How far along training is" />
@@ -874,6 +894,7 @@ export default function DemoPage() {
                 Everything below is live data from the real server, not animations or mock data.
               </p>
             </div>
+            <CheckpointProof checkpointMarkers={checkpointMarkers} />
             <VisitorStats />
             <ActivityFeed />
             <SystemInfo />
