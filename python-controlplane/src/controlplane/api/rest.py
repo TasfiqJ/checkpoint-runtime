@@ -467,7 +467,13 @@ def _register_routes(application: FastAPI) -> None:
 
         try:
             if status.state == RunState.FAILED:
-                coord.transition_run(run_id, RunState.RECOVERING)
+                # Only transition to RECOVERING — the worker will call resume()
+                # again after loading the checkpoint to go RECOVERING -> RUNNING.
+                # This lets the frontend see the RECOVERING state while the
+                # checkpoint is being loaded from object storage.
+                status = coord.transition_run(run_id, RunState.RECOVERING)
+            elif status.state == RunState.RECOVERING:
+                # Worker finished loading checkpoint, ready to train
                 status = coord.transition_run(run_id, RunState.RUNNING)
             elif status.state == RunState.RUNNING:
                 pass  # Already running — no-op for idempotent resume
@@ -1141,7 +1147,15 @@ def _register_routes(application: FastAPI) -> None:
 
     @application.post("/api/demo/kill-worker/{container_name}", tags=["demo"])
     async def demo_kill_worker(container_name: str, request: Request) -> dict:
-        """Kill a Docker container by name (for live demo)."""
+        """Kill a Docker container by name (for live demo).
+
+        Orchestrates the full failure/recovery cycle:
+        1. Kill both worker containers (DDP requires both to restart)
+        2. Immediately transition the active run to FAILED
+        3. Clear old heartbeat leases (prevent stale timeout re-triggering)
+        4. Docker restart:always restarts containers on Linux;
+           safety-net restart after 5s for Windows dev.
+        """
         import subprocess
 
         # Only allow killing known worker containers
@@ -1160,6 +1174,36 @@ def _register_routes(application: FastAPI) -> None:
             if kill_result.returncode != 0:
                 return {"killed": container_name, "success": False, "output": kill_result.stderr.strip()}
 
+            # Kill the other worker too — DDP requires both to restart together
+            other = "ckpt-worker-1" if container_name == "ckpt-worker-0" else "ckpt-worker-0"
+            subprocess.run(
+                ["docker", "kill", other],
+                capture_output=True, text=True, timeout=10,
+            )
+
+            # Immediately transition the active run to FAILED
+            coord = _get_coordinator(request)
+            runs = coord.list_runs()
+            active = [
+                r for r in runs
+                if r.state in (RunState.RUNNING, RunState.CHECKPOINTING, RunState.COMMITTED)
+            ]
+            if active:
+                demo_run_id = active[0].run_id
+                try:
+                    coord.set_run_error(demo_run_id, f"Worker {container_name} killed (demo)")
+                    logger.info("Kill endpoint: run %s transitioned to FAILED", demo_run_id)
+                except Exception as exc:
+                    logger.warning("Kill endpoint: could not fail run %s: %s", demo_run_id, exc)
+
+                # Clear old worker leases so HeartbeatManager won't re-trigger
+                # RecoveryManager at the 15s dead_threshold
+                heartbeat_mgr: HeartbeatManager = request.app.state.heartbeat_mgr
+                for wid in list(heartbeat_mgr._leases):
+                    if heartbeat_mgr._leases[wid].run_id == demo_run_id:
+                        heartbeat_mgr.unregister(wid)
+                logger.info("Cleared heartbeat leases for run %s", demo_run_id)
+
             # Record kill in activity feed with visitor's country
             forwarded = request.headers.get("x-forwarded-for", "")
             client_ip = forwarded.split(",")[0].strip() if forwarded else (
@@ -1172,17 +1216,21 @@ def _register_routes(application: FastAPI) -> None:
                 geo["flag"],
             )
 
-            # Auto-restart the container after a brief delay so
-            # the worker can recover from the latest checkpoint.
+            # Safety-net restart after 5s (for Windows where restart:always
+            # doesn't work after docker kill; on Linux it's a harmless no-op)
             import asyncio
 
             async def _restart():
-                await asyncio.sleep(3)
+                await asyncio.sleep(5)
                 subprocess.run(
                     ["docker", "start", container_name],
                     capture_output=True, text=True, timeout=10,
                 )
-                logger.info("Auto-restarted %s after kill", container_name)
+                subprocess.run(
+                    ["docker", "start", other],
+                    capture_output=True, text=True, timeout=10,
+                )
+                logger.info("Safety-net restarted %s and %s after kill", container_name, other)
 
             asyncio.create_task(_restart())
 

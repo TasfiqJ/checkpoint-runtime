@@ -513,6 +513,19 @@ def train(args: argparse.Namespace) -> None:
     if args.resume or use_runtime:
         if use_runtime:
             start_step = load_checkpoint_runtime(model, optimizer, rank, runtime_client, run_id)
+            # After checkpoint is restored, transition RECOVERING -> RUNNING.
+            # The first resume() call (in _get_or_create_run_id) moved the run
+            # from FAILED -> RECOVERING.  Now that the checkpoint is loaded we
+            # signal that recovery is complete.
+            if start_step > 0 and rank == 0:
+                try:
+                    runtime_client.resume(run_id)
+                    logger.info(
+                        "Resumed run %s after checkpoint restore (step=%d)",
+                        run_id, start_step,
+                    )
+                except Exception as exc:
+                    logger.warning("Could not resume run after restore: %s", exc)
         else:
             start_step = load_checkpoint_local(model, optimizer, checkpoint_dir, rank)
 

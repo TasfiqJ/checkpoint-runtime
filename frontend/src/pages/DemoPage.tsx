@@ -180,8 +180,8 @@ export default function DemoPage() {
               recoveryStartTimeRef.current = Date.now();
             }
 
-            // Walkthrough auto-advance: failure detected
-            if (data.state === 'FAILED' && hasKilled) {
+            // Walkthrough auto-advance: failure or recovery detected
+            if ((data.state === 'FAILED' || data.state === 'RECOVERING') && hasKilled) {
               setWalkthroughStep(3);
             }
 
@@ -264,7 +264,7 @@ export default function DemoPage() {
         const res = await fetch(`${API_BASE}/api/runs`);
         if (res.ok) {
           const runs: RunStatus[] = await res.json();
-          const active = runs.find(r => r.state === 'RUNNING' || r.state === 'CHECKPOINTING' || r.state === 'COMMITTED');
+          const active = runs.find(r => ['RUNNING', 'CHECKPOINTING', 'COMMITTED', 'FAILED', 'RECOVERING'].includes(r.state));
           if (active) {
             foundRunId = active.run_id;
             break;
