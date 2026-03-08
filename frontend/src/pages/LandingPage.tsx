@@ -107,15 +107,15 @@ export default function LandingPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </Link>
-            <a
-              href="#why-i-built-this"
-              className="btn-ghost cursor-pointer inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150"
+            <Link
+              to="/how-it-works"
+              className="cursor-pointer inline-flex items-center gap-2 px-6 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30"
             >
               How I Built It
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
-            </a>
+            </Link>
           </div>
         </div>
       </section>
@@ -289,6 +289,18 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="mt-10 flex justify-center">
+          <Link
+            to="/how-it-works"
+            className="cursor-pointer inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg transition-colors duration-150 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30"
+          >
+            Exhaustive Details
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </Link>
         </div>
       </section>
 
