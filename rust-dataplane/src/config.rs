@@ -29,15 +29,9 @@ impl Config {
             backpressure_queue_depth: env_or("BACKPRESSURE_QUEUE_DEPTH", "32")
                 .parse()
                 .unwrap_or(32),
-            max_concurrent_uploads: env_or("MAX_CONCURRENT_UPLOADS", "8")
-                .parse()
-                .unwrap_or(8),
-            retry_max_attempts: env_or("RETRY_MAX_ATTEMPTS", "5")
-                .parse()
-                .unwrap_or(5),
-            retry_base_delay_ms: env_or("RETRY_BASE_DELAY_MS", "100")
-                .parse()
-                .unwrap_or(100),
+            max_concurrent_uploads: env_or("MAX_CONCURRENT_UPLOADS", "8").parse().unwrap_or(8),
+            retry_max_attempts: env_or("RETRY_MAX_ATTEMPTS", "5").parse().unwrap_or(5),
+            retry_base_delay_ms: env_or("RETRY_BASE_DELAY_MS", "100").parse().unwrap_or(100),
             otel_endpoint: env_or("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4317"),
         }
     }

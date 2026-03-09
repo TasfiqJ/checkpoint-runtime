@@ -16,8 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
 
     // Build Prometheus metrics endpoint
-    let metrics_addr: std::net::SocketAddr =
-        format!("0.0.0.0:{}", cfg.metrics_port).parse()?;
+    let metrics_addr: std::net::SocketAddr = format!("0.0.0.0:{}", cfg.metrics_port).parse()?;
 
     let grpc_addr = format!("0.0.0.0:{}", cfg.grpc_port).parse()?;
     let svc = grpc_service::build_grpc_server(cfg).await?;
@@ -44,11 +43,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 async fn serve_metrics(
     addr: std::net::SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use bytes::Bytes;
+    use http_body_util::Full;
     use hyper::body::Incoming;
     use hyper::{Request, Response};
     use hyper_util::rt::TokioIo;
-    use http_body_util::Full;
-    use bytes::Bytes;
     use prometheus::Encoder;
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -78,10 +77,9 @@ async fn serve_metrics(
                 }
             });
 
-            if let Err(err) =
-                hyper::server::conn::http1::Builder::new()
-                    .serve_connection(io, service)
-                    .await
+            if let Err(err) = hyper::server::conn::http1::Builder::new()
+                .serve_connection(io, service)
+                .await
             {
                 tracing::error!(error = %err, "Metrics server connection error");
             }

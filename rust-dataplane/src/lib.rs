@@ -1,9 +1,9 @@
-pub mod config;
-pub mod checkpoint;
-pub mod dataset;
-pub mod storage;
 pub mod backpressure;
-pub mod retry;
-pub mod telemetry;
-pub mod metrics;
+pub mod checkpoint;
+pub mod config;
+pub mod dataset;
 pub mod grpc_service;
+pub mod metrics;
+pub mod retry;
+pub mod storage;
+pub mod telemetry;

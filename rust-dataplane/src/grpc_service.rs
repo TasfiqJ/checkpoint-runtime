@@ -64,8 +64,12 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             let chunk = chunk_result.map_err(|e| {
                 self.backpressure.decrement();
                 metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
-                metrics::SHARD_WRITES_TOTAL.with_label_values(&["error"]).inc();
-                metrics::GRPC_REQUESTS_TOTAL.with_label_values(&["write_shard", "ERROR"]).inc();
+                metrics::SHARD_WRITES_TOTAL
+                    .with_label_values(&["error"])
+                    .inc();
+                metrics::GRPC_REQUESTS_TOTAL
+                    .with_label_values(&["write_shard", "ERROR"])
+                    .inc();
                 Status::internal(format!("Stream error: {}", e))
             })?;
 
@@ -113,7 +117,9 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             Ok(result) => {
                 self.backpressure.decrement();
                 metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
-                metrics::SHARD_WRITES_TOTAL.with_label_values(&["success"]).inc();
+                metrics::SHARD_WRITES_TOTAL
+                    .with_label_values(&["success"])
+                    .inc();
                 metrics::SHARD_WRITE_BYTES_TOTAL
                     .with_label_values(&[&run_id])
                     .inc_by(result.total_bytes as f64);
@@ -134,7 +140,9 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             Err(e) => {
                 self.backpressure.decrement();
                 metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
-                metrics::SHARD_WRITES_TOTAL.with_label_values(&["error"]).inc();
+                metrics::SHARD_WRITES_TOTAL
+                    .with_label_values(&["error"])
+                    .inc();
                 metrics::SHARD_WRITE_DURATION_SECONDS
                     .with_label_values(&["error"])
                     .observe(start.elapsed().as_secs_f64());
@@ -197,7 +205,9 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             .read_shard(&storage_key, 4 * 1024 * 1024)
             .await
             .map_err(|e| {
-                metrics::SHARD_READS_TOTAL.with_label_values(&["error"]).inc();
+                metrics::SHARD_READS_TOTAL
+                    .with_label_values(&["error"])
+                    .inc();
                 metrics::SHARD_READ_DURATION_SECONDS
                     .with_label_values(&["error"])
                     .observe(start.elapsed().as_secs_f64());
@@ -207,7 +217,9 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                 Status::internal(format!("Read failed: {}", e))
             })?;
 
-        metrics::SHARD_READS_TOTAL.with_label_values(&["success"]).inc();
+        metrics::SHARD_READS_TOTAL
+            .with_label_values(&["success"])
+            .inc();
         metrics::SHARD_READ_DURATION_SECONDS
             .with_label_values(&["success"])
             .observe(start.elapsed().as_secs_f64());
@@ -269,7 +281,9 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
 
         match self.manifest_mgr.write_manifest(&manifest).await {
             Ok(key) => {
-                metrics::CHECKPOINT_COMMITS_TOTAL.with_label_values(&["success"]).inc();
+                metrics::CHECKPOINT_COMMITS_TOTAL
+                    .with_label_values(&["success"])
+                    .inc();
                 metrics::CHECKPOINT_COMMIT_DURATION_SECONDS
                     .with_label_values(&["success"])
                     .observe(start.elapsed().as_secs_f64());
@@ -288,7 +302,9 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                 }))
             }
             Err(e) => {
-                metrics::CHECKPOINT_COMMITS_TOTAL.with_label_values(&["error"]).inc();
+                metrics::CHECKPOINT_COMMITS_TOTAL
+                    .with_label_values(&["error"])
+                    .inc();
                 metrics::CHECKPOINT_COMMIT_DURATION_SECONDS
                     .with_label_values(&["error"])
                     .observe(start.elapsed().as_secs_f64());
@@ -318,7 +334,9 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             .await
         {
             Ok(deleted) => {
-                metrics::CHECKPOINT_ABORTS_TOTAL.with_label_values(&["success"]).inc();
+                metrics::CHECKPOINT_ABORTS_TOTAL
+                    .with_label_values(&["success"])
+                    .inc();
                 metrics::GC_SHARDS_DELETED_TOTAL
                     .with_label_values(&["abort"])
                     .inc_by(deleted as f64);
@@ -331,7 +349,9 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                 }))
             }
             Err(e) => {
-                metrics::CHECKPOINT_ABORTS_TOTAL.with_label_values(&["error"]).inc();
+                metrics::CHECKPOINT_ABORTS_TOTAL
+                    .with_label_values(&["error"])
+                    .inc();
                 metrics::GRPC_REQUESTS_TOTAL
                     .with_label_values(&["abort_checkpoint", "ERROR"])
                     .inc();
@@ -395,9 +415,7 @@ pub async fn build_grpc_server(
     let reader = Arc::new(ShardReader::new(s3.clone(), config.s3_bucket.clone()));
     let manifest_mgr = Arc::new(ManifestManager::new(s3.clone(), config.s3_bucket.clone()));
     let gc = Arc::new(GarbageCollector::new(s3.clone(), config.s3_bucket.clone()));
-    let backpressure = Arc::new(BackpressureController::new(
-        config.backpressure_queue_depth,
-    ));
+    let backpressure = Arc::new(BackpressureController::new(config.backpressure_queue_depth));
 
     let svc = CheckpointServiceImpl {
         writer,

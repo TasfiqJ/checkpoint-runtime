@@ -1,4 +1,4 @@
-use tracing::{info, warn, instrument};
+use tracing::{info, instrument, warn};
 
 use crate::storage::s3::S3Client;
 
@@ -53,10 +53,7 @@ impl GarbageCollector {
             let parts: Vec<&str> = key.split('/').collect();
             if parts.len() >= 3 {
                 let ckpt_id = parts[1].to_string();
-                checkpoints
-                    .entry(ckpt_id)
-                    .or_default()
-                    .push(key.clone());
+                checkpoints.entry(ckpt_id).or_default().push(key.clone());
             }
         }
 

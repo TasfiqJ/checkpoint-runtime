@@ -48,7 +48,10 @@ impl ManifestManager {
 
         // Check idempotency: if manifest already exists, return success
         if self.s3.object_exists(&self.bucket, &key).await? {
-            info!(key, "Manifest already exists, returning success (idempotent)");
+            info!(
+                key,
+                "Manifest already exists, returning success (idempotent)"
+            );
             return Ok(key);
         }
 

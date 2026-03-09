@@ -84,7 +84,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
 
       - name: TypeScript check
         working-directory: frontend

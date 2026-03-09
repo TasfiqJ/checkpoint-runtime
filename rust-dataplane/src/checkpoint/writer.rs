@@ -23,8 +23,19 @@ pub struct WriteResult {
 /// but embeds the SHA-256 digest so that two identical payloads map to
 /// the same object.  Re-uploading a shard with a matching checksum is
 /// therefore a no-op at the storage layer (idempotent write).
-fn content_addressed_key(run_id: &str, checkpoint_id: &str, shard_id: &str, sha256: &str) -> String {
-    format!("{}/{}/sha256-{}-{}.bin", run_id, checkpoint_id, &sha256[..16], shard_id)
+fn content_addressed_key(
+    run_id: &str,
+    checkpoint_id: &str,
+    shard_id: &str,
+    sha256: &str,
+) -> String {
+    format!(
+        "{}/{}/sha256-{}-{}.bin",
+        run_id,
+        checkpoint_id,
+        &sha256[..16],
+        shard_id
+    )
 }
 
 impl ShardWriter {

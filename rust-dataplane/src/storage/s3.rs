@@ -14,13 +14,8 @@ impl S3Client {
         access_key: &str,
         secret_key: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let creds = aws_credential_types::Credentials::new(
-            access_key,
-            secret_key,
-            None,
-            None,
-            "static",
-        );
+        let creds =
+            aws_credential_types::Credentials::new(access_key, secret_key, None, None, "static");
 
         let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(aws_types::region::Region::new(region.to_string()))
@@ -45,11 +40,7 @@ impl S3Client {
         match self.client.head_bucket().bucket(bucket).send().await {
             Ok(_) => Ok(()),
             Err(_) => {
-                self.client
-                    .create_bucket()
-                    .bucket(bucket)
-                    .send()
-                    .await?;
+                self.client.create_bucket().bucket(bucket).send().await?;
                 Ok(())
             }
         }
@@ -111,7 +102,14 @@ impl S3Client {
         bucket: &str,
         key: &str,
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-        match self.client.head_object().bucket(bucket).key(key).send().await {
+        match self
+            .client
+            .head_object()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await
+        {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
@@ -127,11 +125,7 @@ impl S3Client {
         let mut continuation_token: Option<String> = None;
 
         loop {
-            let mut req = self
-                .client
-                .list_objects_v2()
-                .bucket(bucket)
-                .prefix(prefix);
+            let mut req = self.client.list_objects_v2().bucket(bucket).prefix(prefix);
 
             if let Some(token) = continuation_token.take() {
                 req = req.continuation_token(token);

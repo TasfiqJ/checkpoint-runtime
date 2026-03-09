@@ -64,8 +64,7 @@ impl BackpressureController {
     }
 
     pub fn depth(&self) -> usize {
-        self.queue_depth
-            .load(std::sync::atomic::Ordering::Relaxed)
+        self.queue_depth.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn max_depth(&self) -> usize {

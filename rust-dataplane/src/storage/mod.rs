@@ -1,2 +1,2 @@
-pub mod s3;
 pub mod checksum;
+pub mod s3;

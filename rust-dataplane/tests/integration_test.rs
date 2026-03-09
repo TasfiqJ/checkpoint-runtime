@@ -11,8 +11,8 @@ mod common {
     use super::*;
 
     pub async fn create_s3_client() -> ckpt_dataplane::storage::s3::S3Client {
-        let endpoint = std::env::var("S3_ENDPOINT")
-            .unwrap_or_else(|_| "http://localhost:9000".to_string());
+        let endpoint =
+            std::env::var("S3_ENDPOINT").unwrap_or_else(|_| "http://localhost:9000".to_string());
         ckpt_dataplane::storage::s3::S3Client::new(
             &endpoint,
             "us-east-1",
@@ -51,7 +51,9 @@ async fn test_s3_object_exists() {
 
     assert!(!s3.object_exists(bucket, "nonexistent").await.unwrap());
 
-    s3.put_object(bucket, "exists-test", Bytes::from("data")).await.unwrap();
+    s3.put_object(bucket, "exists-test", Bytes::from("data"))
+        .await
+        .unwrap();
     assert!(s3.object_exists(bucket, "exists-test").await.unwrap());
 
     s3.delete_object(bucket, "exists-test").await.unwrap();
@@ -91,10 +93,7 @@ async fn test_write_shard_with_checksum() {
     let writer =
         ckpt_dataplane::checkpoint::writer::ShardWriter::new(s3.clone(), bucket.to_string());
 
-    let data = vec![
-        Bytes::from(vec![0u8; 1024]),
-        Bytes::from(vec![1u8; 1024]),
-    ];
+    let data = vec![Bytes::from(vec![0u8; 1024]), Bytes::from(vec![1u8; 1024])];
 
     let result = writer
         .write_shard("run-test", "ckpt-001", "shard-0", data)
@@ -164,7 +163,10 @@ async fn test_manifest_write_and_read() {
     assert!(key.contains("_manifest.json"));
 
     // Read it back
-    let read_manifest = mgr.read_manifest("run-manifest-test", "ckpt-test-001").await.unwrap();
+    let read_manifest = mgr
+        .read_manifest("run-manifest-test", "ckpt-test-001")
+        .await
+        .unwrap();
     assert!(read_manifest.is_some());
     let read = read_manifest.unwrap();
     assert_eq!(read.step, 42);
@@ -189,43 +191,56 @@ async fn test_gc_deletes_orphaned_shards() {
 
     // Create an orphaned checkpoint (shards without manifest)
     let run_id = "run-gc-test";
-    s3.put_object(bucket, &format!("{}/orphan-ckpt/shard-0.bin", run_id), Bytes::from("data"))
-        .await
-        .unwrap();
-    s3.put_object(bucket, &format!("{}/orphan-ckpt/shard-0.sha256", run_id), Bytes::from("hash"))
-        .await
-        .unwrap();
+    s3.put_object(
+        bucket,
+        &format!("{}/orphan-ckpt/shard-0.bin", run_id),
+        Bytes::from("data"),
+    )
+    .await
+    .unwrap();
+    s3.put_object(
+        bucket,
+        &format!("{}/orphan-ckpt/shard-0.sha256", run_id),
+        Bytes::from("hash"),
+    )
+    .await
+    .unwrap();
 
     // Create a committed checkpoint (with manifest)
-    s3.put_object(bucket, &format!("{}/valid-ckpt/shard-0.bin", run_id), Bytes::from("data"))
-        .await
-        .unwrap();
-    s3.put_object(bucket, &format!("{}/valid-ckpt/_manifest.json", run_id), Bytes::from("{}"))
-        .await
-        .unwrap();
+    s3.put_object(
+        bucket,
+        &format!("{}/valid-ckpt/shard-0.bin", run_id),
+        Bytes::from("data"),
+    )
+    .await
+    .unwrap();
+    s3.put_object(
+        bucket,
+        &format!("{}/valid-ckpt/_manifest.json", run_id),
+        Bytes::from("{}"),
+    )
+    .await
+    .unwrap();
 
     // Run GC
     let deleted = gc.collect_orphans(run_id).await.unwrap();
     assert_eq!(deleted, 2); // orphan shard + checksum deleted
 
     // Valid checkpoint should still exist
-    assert!(
-        s3.object_exists(bucket, &format!("{}/valid-ckpt/shard-0.bin", run_id))
-            .await
-            .unwrap()
-    );
-    assert!(
-        s3.object_exists(bucket, &format!("{}/valid-ckpt/_manifest.json", run_id))
-            .await
-            .unwrap()
-    );
+    assert!(s3
+        .object_exists(bucket, &format!("{}/valid-ckpt/shard-0.bin", run_id))
+        .await
+        .unwrap());
+    assert!(s3
+        .object_exists(bucket, &format!("{}/valid-ckpt/_manifest.json", run_id))
+        .await
+        .unwrap());
 
     // Orphan should be gone
-    assert!(
-        !s3.object_exists(bucket, &format!("{}/orphan-ckpt/shard-0.bin", run_id))
-            .await
-            .unwrap()
-    );
+    assert!(!s3
+        .object_exists(bucket, &format!("{}/orphan-ckpt/shard-0.bin", run_id))
+        .await
+        .unwrap());
 
     // Cleanup
     s3.delete_object(bucket, &format!("{}/valid-ckpt/shard-0.bin", run_id))

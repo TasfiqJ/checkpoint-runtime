@@ -913,7 +913,8 @@ def _register_routes(application: FastAPI) -> None:
     @application.get("/api/demo/system", tags=["demo"])
     async def demo_system_info() -> dict:
         """Return host system information — proves this runs on real hardware."""
-        import subprocess, platform
+        import platform
+        import subprocess
 
         def _run(cmd: list[str]) -> str:
             try:
@@ -963,7 +964,8 @@ def _register_routes(application: FastAPI) -> None:
         docker_version = _run(["docker", "--version"])
 
         # Container count
-        container_count = _run(["docker", "ps", "-q"]).count("\n") + 1 if _run(["docker", "ps", "-q"]) else 0
+        ps_output = _run(["docker", "ps", "-q"])
+        container_count = ps_output.count("\n") + 1 if ps_output else 0
 
         return {
             "hostname": platform.node(),
@@ -983,7 +985,8 @@ def _register_routes(application: FastAPI) -> None:
     @application.get("/api/demo/containers", tags=["demo"])
     async def demo_containers() -> list[dict]:
         """Return live Docker container status for the compose stack."""
-        import subprocess, json as _json
+        import json as _json
+        import subprocess
 
         try:
             result = subprocess.run(
@@ -1052,8 +1055,8 @@ def _register_routes(application: FastAPI) -> None:
                 queues: asyncio.Queue[tuple[str, str] | None] = asyncio.Queue()
 
                 async def reader(name: str, proc: asyncio.subprocess.Process):
-                    async for n, l in read_lines(name, proc):
-                        await queues.put((n, l))
+                    async for n, line_text in read_lines(name, proc):
+                        await queues.put((n, line_text))
                     await queues.put(None)
 
                 tasks = [_aio.create_task(reader(n, p)) for n, p in processes]
@@ -1069,11 +1072,10 @@ def _register_routes(application: FastAPI) -> None:
                     yield f"data: {payload}\n\n"
 
             finally:
+                import contextlib
                 for _, proc in processes:
-                    try:
+                    with contextlib.suppress(ProcessLookupError):
                         proc.kill()
-                    except ProcessLookupError:
-                        pass
 
         return StreamingResponse(stream(), media_type="text/event-stream", headers={
             "Cache-Control": "no-cache",
@@ -1089,8 +1091,12 @@ def _register_routes(application: FastAPI) -> None:
 
         s3_endpoint = os.environ.get("S3_ENDPOINT", "http://minio:9000")
         s3_bucket = os.environ.get("S3_BUCKET", "checkpoints")
-        s3_access = os.environ.get("S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"))
-        s3_secret = os.environ.get("S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"))
+        s3_access = os.environ.get(
+            "S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+        )
+        s3_secret = os.environ.get(
+            "S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        )
 
         try:
             s3 = boto3.client(
@@ -1119,7 +1125,9 @@ def _register_routes(application: FastAPI) -> None:
     @application.get("/api/demo/storage/manifest", tags=["demo"])
     async def demo_storage_manifest(key: str = Query(...)) -> dict:
         """Read a _manifest.json file from MinIO and return its content."""
-        import boto3, json as _json
+        import json as _json
+
+        import boto3
         from botocore.config import Config as BotoConfig
 
         if not key.endswith("_manifest.json"):
@@ -1127,8 +1135,12 @@ def _register_routes(application: FastAPI) -> None:
 
         s3_endpoint = os.environ.get("S3_ENDPOINT", "http://minio:9000")
         s3_bucket = os.environ.get("S3_BUCKET", "checkpoints")
-        s3_access = os.environ.get("S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"))
-        s3_secret = os.environ.get("S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"))
+        s3_access = os.environ.get(
+            "S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+        )
+        s3_secret = os.environ.get(
+            "S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        )
 
         try:
             s3 = boto3.client(
@@ -1172,7 +1184,11 @@ def _register_routes(application: FastAPI) -> None:
                 capture_output=True, text=True, timeout=10,
             )
             if kill_result.returncode != 0:
-                return {"killed": container_name, "success": False, "output": kill_result.stderr.strip()}
+                return {
+                    "killed": container_name,
+                    "success": False,
+                    "output": kill_result.stderr.strip(),
+                }
 
             # Kill the other worker too — DDP requires both to restart together
             other = "ckpt-worker-1" if container_name == "ckpt-worker-0" else "ckpt-worker-0"
@@ -1203,10 +1219,9 @@ def _register_routes(application: FastAPI) -> None:
                         w = worker_mgr._workers.get(wid)
                         if w and w.run_id == demo_run_id and w.status == "ACTIVE":
                             w.status = "DEAD"
-                            try:
+                            import contextlib
+                            with contextlib.suppress(Exception):
                                 coord.mark_worker_dead(demo_run_id, wid)
-                            except Exception:
-                                pass
                     logger.info("Marked old workers DEAD for run %s", demo_run_id)
 
                 # Clear old worker leases so HeartbeatManager won't re-trigger
@@ -1265,8 +1280,6 @@ def _register_routes(application: FastAPI) -> None:
     @application.post("/api/demo/visitors/ping", tags=["demo"])
     async def demo_visitor_ping(request: Request) -> dict:
         """Register/update a visitor and return live stats."""
-        import json as _json
-
         # Get client IP
         forwarded = request.headers.get("x-forwarded-for", "")
         client_ip = forwarded.split(",")[0].strip() if forwarded else (

@@ -9,11 +9,10 @@ The coordinator is responsible for:
 
 from __future__ import annotations
 
-import json
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Any, Protocol, runtime_checkable
+from datetime import UTC, datetime
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from controlplane.models import (
@@ -23,7 +22,7 @@ from controlplane.models import (
     RunStatus,
     WorkerInfo,
 )
-from controlplane.state_machine import InvalidTransitionError, RunStateMachine
+from controlplane.state_machine import RunStateMachine
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +170,7 @@ class Coordinator:
     def create_run(self, config: RunConfig) -> RunStatus:
         """Create a new training run and persist its initial state."""
         run_id = uuid4().hex[:16]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         fsm = RunStateMachine()
         self._fsms[run_id] = fsm
@@ -213,7 +212,7 @@ class Coordinator:
         fsm.transition(target)
 
         status.state = target
-        status.updated_at = datetime.now(timezone.utc)
+        status.updated_at = datetime.now(UTC)
         self._persist_run(status)
         return status
 
@@ -222,7 +221,7 @@ class Coordinator:
         if status is None:
             raise KeyError(f"Run {run_id!r} not found")
         status.current_step = step
-        status.updated_at = datetime.now(timezone.utc)
+        status.updated_at = datetime.now(UTC)
         self._persist_run(status)
         return status
 
@@ -236,7 +235,7 @@ class Coordinator:
 
         status.state = RunState.FAILED
         status.error_message = message
-        status.updated_at = datetime.now(timezone.utc)
+        status.updated_at = datetime.now(UTC)
         self._persist_run(status)
         return status
 
@@ -253,7 +252,7 @@ class Coordinator:
             raise KeyError(f"Run {run_id!r} not found")
 
         checkpoint_id = uuid4().hex[:16]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         info = CheckpointInfo(
             checkpoint_id=checkpoint_id,
@@ -313,7 +312,7 @@ class Coordinator:
         if shard_ids is not None:
             info.shard_ids = shard_ids
         if state == "COMMITTED" and info.committed_at is None:
-            info.committed_at = datetime.now(timezone.utc)
+            info.committed_at = datetime.now(UTC)
 
         self._kv.put(
             _checkpoint_key(checkpoint_id),
@@ -353,7 +352,7 @@ class Coordinator:
         hostname: str = "",
     ) -> WorkerInfo:
         worker_id = uuid4().hex[:12]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         worker = WorkerInfo(
             worker_id=worker_id,
@@ -377,7 +376,7 @@ class Coordinator:
             raise KeyError(f"Worker {worker_id!r} not found for run {run_id!r}")
 
         worker = WorkerInfo.model_validate_json(raw)
-        worker.last_heartbeat = datetime.now(timezone.utc)
+        worker.last_heartbeat = datetime.now(UTC)
         worker.current_step = step
 
         self._kv.put(
