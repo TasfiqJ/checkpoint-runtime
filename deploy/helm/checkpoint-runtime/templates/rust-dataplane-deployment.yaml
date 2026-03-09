@@ -48,12 +48,12 @@ spec:
           resources:
             {{- toYaml .Values.rustDataplane.resources | nindent 12 }}
           livenessProbe:
-            grpc:
+            tcpSocket:
               port: 50051
             initialDelaySeconds: 10
             periodSeconds: 10
           readinessProbe:
-            grpc:
+            tcpSocket:
               port: 50051
             initialDelaySeconds: 5
             periodSeconds: 5
