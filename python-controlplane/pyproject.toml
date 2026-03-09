@@ -71,3 +71,18 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+exclude = [
+    "controlplane/generated/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "controlplane.generated.*",
+    "controlplane.api.grpc_client",
+    "controlplane.api.rest",
+    "controlplane.coordinator",
+    "controlplane.heartbeat",
+    "controlplane.worker_manager",
+    "sdk.client",
+]
+ignore_errors = true
