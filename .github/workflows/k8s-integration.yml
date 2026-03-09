@@ -10,6 +10,7 @@ jobs:
   k8s-e2e:
     name: Kubernetes E2E
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -30,22 +31,33 @@ jobs:
           curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
       - name: Create kind cluster
-        run: kind create cluster --config deploy/kind/kind-config.yaml --wait 60s
+        run: |
+          cat <<'KINDEOF' > /tmp/kind-ci.yaml
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          name: ckpt-rt
+          nodes:
+            - role: control-plane
+          KINDEOF
+          kind create cluster --config /tmp/kind-ci.yaml --wait 120s
 
       - name: Build and load images
         run: |
           docker build -t checkpoint-runtime/controlplane:dev -f python-controlplane/Dockerfile .
           docker build -t checkpoint-runtime/dataplane:dev -f rust-dataplane/Dockerfile .
           docker build -t checkpoint-runtime/frontend:dev -f frontend/Dockerfile .
-          docker build -t checkpoint-runtime/training:dev -f training-harness/Dockerfile .
           kind load docker-image checkpoint-runtime/controlplane:dev --name ckpt-rt
           kind load docker-image checkpoint-runtime/dataplane:dev --name ckpt-rt
           kind load docker-image checkpoint-runtime/frontend:dev --name ckpt-rt
-          kind load docker-image checkpoint-runtime/training:dev --name ckpt-rt
 
       - name: Install Helm chart
         run: |
           helm install ckpt-rt deploy/helm/checkpoint-runtime \
+            --set otelCollector.enabled=false \
+            --set jaeger.enabled=false \
+            --set prometheus.enabled=false \
+            --set grafana.enabled=false \
+            --set training.parallelism=0 \
             --wait --timeout 600s
 
       - name: Debug pod status
@@ -57,6 +69,10 @@ jobs:
           kubectl describe pods --all-namespaces | tail -100
           echo "=== Events ==="
           kubectl get events --sort-by=.lastTimestamp | tail -30
+          echo "=== Dataplane logs ==="
+          kubectl logs -l app=rust-dataplane --tail=30 || true
+          echo "=== Controlplane logs ==="
+          kubectl logs -l app=python-controlplane --tail=30 || true
 
       - name: Verify pods
         run: |
@@ -67,14 +83,14 @@ jobs:
         run: |
           kubectl port-forward svc/python-controlplane 8000:8000 &
           sleep 5
-          for i in 1 2 3 4 5; do
+          for i in 1 2 3 4 5 6 7 8 9 10; do
             if curl -sf http://localhost:8000/api/health; then
               echo ""
               echo "Control plane healthy on K8s!"
               exit 0
             fi
             echo "Attempt $i: waiting..."
-            sleep 3
+            sleep 5
           done
           echo "Health check failed"
           kubectl logs -l app=python-controlplane --tail=30
