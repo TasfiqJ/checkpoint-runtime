@@ -43,12 +43,12 @@ export default function ArchitectureDiagram() {
           <ServiceBox
             label="Worker 0"
             sub="PyTorch DDP"
-            color="border-emerald-800/60 bg-emerald-950/30 text-ok"
+            color="border-ok/20 bg-ok-muted text-ok"
           />
           <ServiceBox
             label="Worker 1"
             sub="PyTorch DDP"
-            color="border-emerald-800/60 bg-emerald-950/30 text-ok"
+            color="border-ok/20 bg-ok-muted text-ok"
           />
         </div>
 
@@ -59,13 +59,13 @@ export default function ArchitectureDiagram() {
           <ServiceBox
             label="Control Plane"
             sub="Python / FastAPI"
-            color="border-sky-800/60 bg-sky-950/30 text-info"
+            color="border-info/20 bg-info-muted text-info"
           />
           <Arrow direction="down" />
           <ServiceBox
             label="etcd"
             sub="Coordination"
-            color="border-purple-800/60 bg-purple-950/30 text-purple-400"
+            color="border-brand-violet/20 bg-brand-violet/10 text-brand-violet"
           />
         </div>
 
@@ -76,13 +76,13 @@ export default function ArchitectureDiagram() {
           <ServiceBox
             label="Data Plane"
             sub="Rust / gRPC"
-            color="border-orange-800/60 bg-orange-950/30 text-recover"
+            color="border-recover/20 bg-recover-muted text-recover"
           />
           <Arrow direction="down" />
           <ServiceBox
             label="MinIO"
             sub="S3 Storage"
-            color="border-amber-800/60 bg-amber-950/30 text-warn"
+            color="border-warn/20 bg-warn-muted text-warn"
           />
         </div>
 
@@ -93,17 +93,17 @@ export default function ArchitectureDiagram() {
           <ServiceBox
             label="Prometheus"
             sub="Metrics"
-            color="border-rose-800/60 bg-rose-950/30 text-err"
+            color="border-err/20 bg-err-muted text-err"
           />
           <ServiceBox
             label="Grafana"
             sub="Dashboards"
-            color="border-rose-800/60 bg-rose-950/30 text-err"
+            color="border-err/20 bg-err-muted text-err"
           />
           <ServiceBox
             label="Jaeger"
             sub="Tracing"
-            color="border-rose-800/60 bg-rose-950/30 text-err"
+            color="border-err/20 bg-err-muted text-err"
           />
         </div>
       </div>

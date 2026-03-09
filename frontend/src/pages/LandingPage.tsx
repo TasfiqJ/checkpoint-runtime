@@ -81,7 +81,7 @@ export default function LandingPage() {
 
         <div className="relative max-w-4xl mx-auto px-5 pt-16 md:pt-32 pb-16 text-center">
           <p className="text-sm font-semibold text-brand-violet uppercase tracking-widest mb-6">
-            A Portfolio Project by Tasfiq
+            A Portfolio Project by <a href="https://www.tasfiqj.com/" target="_blank" rel="noopener noreferrer" className="hover:underline">Tasfiq Jasimuddin</a>
           </p>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-txt-1 tracking-tight leading-[1.1]">
@@ -653,7 +653,7 @@ export default function LandingPage() {
             </a>
           </div>
           <p className="text-sm text-txt-3">
-            Built by Tasfiq J
+            Built by <a href="https://www.tasfiqj.com/" target="_blank" rel="noopener noreferrer" className="hover:underline text-txt-2">Tasfiq Jasimuddin</a>
           </p>
         </div>
       </section>
