@@ -23,7 +23,7 @@ export default function HowItWorksPage() {
           and RAM is empty after a crash.
         </P>
         <P>
-          Now imagine this at scale. OpenAI, Google, Meta. They train models on <Strong>thousands</Strong> of
+          Now imagine this at scale. OpenAI, Google, Meta, NVIDIA, Microsoft. They train models on <Strong>thousands</Strong> of
           GPUs for <Strong>weeks</Strong>. A single GPU failure every few hours is normal. Without checkpointing,
           large-scale training is literally impossible.
         </P>
