@@ -6,7 +6,7 @@ export default function HowItWorksPage() {
           How It Works
         </h1>
         <p className="text-sm text-txt-2 mt-2 leading-relaxed">
-          Fair warning: this is a full-on yap fest covering every itty bitty detail of how this project works. For the nerds out there.
+          This is a full on YAP fest covering every itty bitty detail of how this project works. For all the nerds out there.
         </p>
       </header>
 
