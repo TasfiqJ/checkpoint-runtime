@@ -22,7 +22,7 @@ from controlplane.models import (
     RunStatus,
     WorkerInfo,
 )
-from controlplane.state_machine import RunStateMachine
+from controlplane.state_machine import InvalidTransitionError, RunStateMachine  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

@@ -30,6 +30,7 @@ pub struct CheckpointServiceImpl {
     manifest_mgr: Arc<ManifestManager>,
     gc: Arc<GarbageCollector>,
     backpressure: Arc<BackpressureController>,
+    #[allow(dead_code)]
     bucket: String,
 }
 
