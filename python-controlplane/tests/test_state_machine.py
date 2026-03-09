@@ -187,10 +187,11 @@ class TestInvalidTransitions:
         with pytest.raises(InvalidTransitionError):
             sm.recover()
 
-    def test_checkpointing_cannot_go_to_running(self) -> None:
+    def test_checkpointing_can_go_to_running(self) -> None:
+        """CHECKPOINTING -> RUNNING is valid (abort failed checkpoint, resume training)."""
         sm = RunStateMachine(initial_state=RunState.CHECKPOINTING)
-        with pytest.raises(InvalidTransitionError):
-            sm.transition(RunState.RUNNING)
+        sm.transition(RunState.RUNNING)
+        assert sm.state == RunState.RUNNING
 
     def test_failed_cannot_go_to_completed(self) -> None:
         sm = RunStateMachine(initial_state=RunState.FAILED)

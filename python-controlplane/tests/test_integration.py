@@ -104,7 +104,8 @@ class TestCheckpointEndpoints:
         client.post(f"/api/runs/{run_id}/checkpoint?step=100")
         resp = client.post(f"/api/runs/{run_id}/commit")
         assert resp.status_code == 200
-        assert resp.json()["state"] == "COMMITTED"
+        # Commit auto-resumes to RUNNING so the next checkpoint cycle can begin
+        assert resp.json()["state"] == "RUNNING"
 
     def test_list_run_checkpoints(self, client: TestClient, run_id: str) -> None:
         client.post(f"/api/runs/{run_id}/start")
