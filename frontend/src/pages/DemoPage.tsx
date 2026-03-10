@@ -712,15 +712,21 @@ export default function DemoPage() {
                       </div>
                     </div>
                     {worker && (
-                      <span className={`text-sm font-mono font-semibold tabular-nums ${
-                        isDead
-                          ? 'text-err'
-                          : recoverySummary
-                          ? 'text-ok'
-                          : 'text-ok'
-                      }`}>
+                      <motion.span
+                        key={worker.current_step === 0 ? 'zero' : worker.current_step > 0 && hasKilled && !isDead ? 'restored' : 'normal'}
+                        initial={worker.current_step > 0 && hasKilled && !isDead ? { scale: 1.3, opacity: 0 } : false}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                        className={`text-sm font-mono font-semibold tabular-nums ${
+                          worker.current_step === 0
+                            ? 'text-err'
+                            : hasKilled && !isDead
+                            ? 'text-ok text-base'
+                            : 'text-ok'
+                        }`}
+                      >
                         Step {worker.current_step}
-                      </span>
+                      </motion.span>
                     )}
                   </div>
 
