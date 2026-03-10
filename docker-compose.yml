@@ -188,7 +188,8 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_SECURITY_ALLOW_EMBEDDING: "true"
-      GF_SERVER_ROOT_URL: "https://grafana-ckpt.tasfiqj.com"
+      GF_SERVER_ROOT_URL: "https://api-ckpt.tasfiqj.com/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
     volumes:
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro

@@ -961,7 +961,7 @@ export default function DemoPage() {
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <a
-                  href="https://grafana-ckpt.tasfiqj.com/d/ckpt-overview/checkpoint-overview?kiosk"
+                  href="https://api-ckpt.tasfiqj.com/grafana/d/ckpt-overview/checkpoint-overview?kiosk"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-3/60 border border-line/40 text-txt-2 hover:text-txt-1 hover:border-info/50 transition-colors"
@@ -972,7 +972,7 @@ export default function DemoPage() {
                   Checkpoint Overview
                 </a>
                 <a
-                  href="https://grafana-ckpt.tasfiqj.com/d/cluster-health/cluster-health?kiosk"
+                  href="https://api-ckpt.tasfiqj.com/grafana/d/cluster-health/cluster-health?kiosk"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-3/60 border border-line/40 text-txt-2 hover:text-txt-1 hover:border-info/50 transition-colors"
@@ -983,7 +983,7 @@ export default function DemoPage() {
                   Cluster Health
                 </a>
                 <a
-                  href="https://grafana-ckpt.tasfiqj.com/d/perf-deep-dive/performance-deep-dive?kiosk"
+                  href="https://api-ckpt.tasfiqj.com/grafana/d/perf-deep-dive/performance-deep-dive?kiosk"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-3/60 border border-line/40 text-txt-2 hover:text-txt-1 hover:border-info/50 transition-colors"
