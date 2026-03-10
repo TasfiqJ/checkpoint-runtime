@@ -33,7 +33,7 @@ function getContent(
   if (recoverySummary) {
     return {
       step: 'Done',
-      title: 'Recovery Complete — Zero Data Lost',
+      title: 'Recovery Complete: Zero Data Lost',
       body: `Detected crash in ${recoverySummary.detectTime.toFixed(1)}s, recovered in ${recoverySummary.recoverTime.toFixed(1)}s total.`,
       color: 'ok',
     };
@@ -45,7 +45,7 @@ function getContent(
       return {
         step: '2/3',
         title: 'Crash Detected!',
-        body: `The worker stopped sending heartbeats. The system noticed it's gone. Recovery is about to start — the system will restart the container and load the last saved checkpoint from storage.`,
+        body: `The worker stopped sending heartbeats. The system noticed it's gone. Recovery is about to start. The system will restart the container and load the last saved checkpoint from storage.`,
         elapsed,
         color: 'err',
       };
@@ -54,7 +54,7 @@ function getContent(
       return {
         step: '2/3',
         title: 'Recovering...',
-        body: `The crashed worker is restarting. It's loading the last saved checkpoint from object storage right now. When it finishes, training will resume from the exact step it was saved at — no work lost.`,
+        body: `The crashed worker is restarting. It's loading the last saved checkpoint from object storage right now. When it finishes, training will resume from the exact step it was saved at. No work lost.`,
         elapsed,
         color: 'recover',
       };
@@ -75,7 +75,7 @@ function getContent(
     return {
       step: '1/3',
       title: 'Checkpoints Are Being Saved',
-      body: 'Every 50 training steps, the system saves a snapshot of the entire model — all 202K parameters, the optimizer state, and the current step. The blue dots on the loss chart are checkpoints. Kill a worker above whenever you\'re ready.',
+      body: 'Every 50 training steps, the system saves a snapshot of the entire model: all 202K parameters, the optimizer state, and the current step. The blue dots on the loss chart are checkpoints. Kill a worker above whenever you\'re ready.',
       color: 'info',
     };
   }
@@ -84,7 +84,7 @@ function getContent(
   return {
     step: '1/3',
     title: 'Training Has Started',
-    body: 'Two real Docker containers are training a neural network together right now. Watch the loss chart — the green line going down means the model is learning. Checkpoints will start saving automatically every 50 steps.',
+    body: 'Two real Docker containers are training a neural network together right now. Watch the loss chart: the green line going down means the model is learning. Checkpoints will start saving automatically every 50 steps.',
     color: 'ok',
   };
 }
@@ -211,7 +211,7 @@ export default function DemoWalkthrough({ currentStep, runState, elapsedSinceKil
                 The model was restored to the exact state it was saved at.
                 If the checkpoint had failed, loss would reset to{' '}
                 <span className="font-mono text-err">~2.3</span>{' '}
-                (random weights). Look at the chart — training continued from{' '}
+                (random weights). Look at the chart: training continued from{' '}
                 <span className="font-mono text-ok">{recoverySummary.checkpointLoss.toFixed(4)}</span>,
                 not <span className="font-mono text-err">2.3</span>.
               </p>
