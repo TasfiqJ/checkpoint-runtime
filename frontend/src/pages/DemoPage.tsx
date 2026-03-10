@@ -937,6 +937,53 @@ export default function DemoPage() {
             <ActivityFeed />
             <SystemInfo />
             <ContainerStatus />
+
+            {/* Grafana Dashboards */}
+            <div className="card px-4 py-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="badge-xs bg-recover-muted text-recover">grafana</span>
+                <p className="text-sm font-semibold text-txt-1">Live Dashboards</p>
+              </div>
+              <p className="text-xs text-txt-3 leading-relaxed">
+                Real Grafana dashboards powered by Prometheus metrics from the running cluster.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <a
+                  href="https://grafana-ckpt.tasfiqj.com/d/ckpt-overview/checkpoint-overview?kiosk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-3/60 border border-line/40 text-txt-2 hover:text-txt-1 hover:border-info/50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  Checkpoint Overview
+                </a>
+                <a
+                  href="https://grafana-ckpt.tasfiqj.com/d/cluster-health/cluster-health?kiosk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-3/60 border border-line/40 text-txt-2 hover:text-txt-1 hover:border-info/50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
+                  Cluster Health
+                </a>
+                <a
+                  href="https://grafana-ckpt.tasfiqj.com/d/perf-deep-dive/performance-deep-dive?kiosk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-3/60 border border-line/40 text-txt-2 hover:text-txt-1 hover:border-info/50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Performance
+                </a>
+              </div>
+            </div>
+
             <LogStream active={!!runId} />
             <StorageBrowser active={!!runId} />
           </div>
