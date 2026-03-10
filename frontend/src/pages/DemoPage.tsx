@@ -712,7 +712,13 @@ export default function DemoPage() {
                       </div>
                     </div>
                     {worker && (
-                      <span className="text-sm text-txt-3 font-mono">
+                      <span className={`text-sm font-mono font-semibold tabular-nums ${
+                        isDead
+                          ? 'text-err'
+                          : recoverySummary
+                          ? 'text-ok'
+                          : 'text-ok'
+                      }`}>
                         Step {worker.current_step}
                       </span>
                     )}
