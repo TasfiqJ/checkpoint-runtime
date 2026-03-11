@@ -378,6 +378,7 @@ class Coordinator:
         worker = WorkerInfo.model_validate_json(raw)
         worker.last_heartbeat = datetime.now(UTC)
         worker.current_step = step
+        worker.status = "ACTIVE"
 
         self._kv.put(
             _worker_key(run_id, worker_id),
