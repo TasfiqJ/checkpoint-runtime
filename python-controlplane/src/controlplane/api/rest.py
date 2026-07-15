@@ -45,6 +45,7 @@ Demo:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -72,6 +73,7 @@ from controlplane.models import (
     WorkerInfo,
 )
 from controlplane.recovery import RecoveryManager
+from controlplane.retention import CheckpointRetentionManager, RetentionConfig
 from controlplane.state_machine import InvalidTransitionError
 from controlplane.telemetry import get_telemetry_manager
 from controlplane.worker_manager import WorkerManager
@@ -192,6 +194,7 @@ async def lifespan(app: FastAPI):
     recovery_mgr = RecoveryManager(coordinator=coord, heartbeat_mgr=heartbeat_mgr)
     telemetry_mgr = get_telemetry_manager()
     telemetry_mgr.setup()
+    retention_mgr = CheckpointRetentionManager(coord, RetentionConfig.from_env())
 
     # Connect to data plane gRPC
     dp_address = os.environ.get("DATAPLANE_GRPC_URL",
@@ -211,12 +214,15 @@ async def lifespan(app: FastAPI):
     app.state.recovery_mgr = recovery_mgr
     app.state.telemetry_mgr = telemetry_mgr
     app.state.dp_client = dp_client
+    app.state.retention_mgr = retention_mgr
 
     await heartbeat_mgr.start_monitoring()
+    await retention_mgr.start()
     logger.info("Phase 3 subsystems initialized")
 
     yield
 
+    await retention_mgr.stop()
     await dp_client.close()
     await heartbeat_mgr.stop_monitoring()
     telemetry_mgr.shutdown()
@@ -287,6 +293,34 @@ def _publish_event(request: Request, run_id: str, event_type: str, data: str) ->
             queue.put_nowait(payload)
         except asyncio.QueueFull:
             logger.warning("Dropping SSE event for run %s (queue full)", run_id)
+
+
+async def _abort_failed_checkpoint(
+    coordinator: Coordinator,
+    dp_client: DataPlaneClient | None,
+    run_id: str,
+    checkpoint_id: str,
+    failure_message: str,
+) -> None:
+    """Record a failed checkpoint and remove any partial storage objects."""
+    with contextlib.suppress(KeyError):
+        coordinator.update_checkpoint_state(checkpoint_id, "FAILED")
+    with contextlib.suppress(KeyError, InvalidTransitionError):
+        coordinator.set_run_error(run_id, failure_message)
+    _CHECKPOINT_SHARDS.pop(checkpoint_id, None)
+
+    if not dp_client or not dp_client.connected:
+        return
+    try:
+        result = await dp_client.abort_checkpoint(checkpoint_id, run_id)
+        if not result.success:
+            logger.warning(
+                "Data plane could not abort checkpoint %s: %s",
+                checkpoint_id,
+                result.error_message,
+            )
+    except Exception as exc:
+        logger.warning("Failed to clean partial checkpoint %s: %s", checkpoint_id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -400,39 +434,51 @@ def _register_routes(application: FastAPI) -> None:
         checkpoints = coord.list_checkpoints(run_id)
         active_cp = next((cp for cp in reversed(checkpoints) if cp.state == "IN_PROGRESS"), None)
 
-        if dp and dp.connected and active_cp:
-            checkpoint_start = time.monotonic()
-            try:
-                # Use shard infos tracked during upload
-                shard_infos = _CHECKPOINT_SHARDS.get(active_cp.checkpoint_id, [])
+        if active_cp is None:
+            raise HTTPException(status_code=409, detail="No uploaded checkpoint is ready to commit")
+        if not dp or not dp.connected:
+            raise HTTPException(status_code=503, detail="Data plane not available")
 
-                result = await dp.commit_checkpoint(
-                    checkpoint_id=active_cp.checkpoint_id,
-                    run_id=run_id,
-                    step=active_cp.step,
-                    shards=shard_infos,
-                )
-                if not result.success:
-                    logger.error("Data plane commit failed: %s", result.error_message)
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Commit failed: {result.error_message}",
-                    )
+        shard_infos = _CHECKPOINT_SHARDS.get(active_cp.checkpoint_id, [])
+        if not shard_infos:
+            raise HTTPException(status_code=409, detail="Checkpoint has no uploaded shards")
 
-                _CHECKPOINT_DURATIONS.append(time.monotonic() - checkpoint_start)
-                logger.info("Checkpoint %s committed to data plane", active_cp.checkpoint_id)
+        checkpoint_start = time.monotonic()
+        try:
+            result = await dp.commit_checkpoint(
+                checkpoint_id=active_cp.checkpoint_id,
+                run_id=run_id,
+                step=active_cp.step,
+                shards=shard_infos,
+            )
+        except Exception as exc:
+            logger.error("Data plane commit call failed: %s", exc)
+            await _abort_failed_checkpoint(
+                coord,
+                dp,
+                run_id,
+                active_cp.checkpoint_id,
+                "Checkpoint manifest write failed",
+            )
+            raise HTTPException(status_code=502, detail="Data plane commit failed") from exc
 
-                # Clean up tracked shard infos to prevent memory leak
-                _CHECKPOINT_SHARDS.pop(active_cp.checkpoint_id, None)
-            except HTTPException:
-                raise
-            except Exception as exc:
-                logger.warning("Data plane commit call failed: %s", exc)
-                _CHECKPOINT_SHARDS.pop(active_cp.checkpoint_id, None)
+        if not result.success:
+            logger.error("Data plane commit failed: %s", result.error_message)
+            await _abort_failed_checkpoint(
+                coord,
+                dp,
+                run_id,
+                active_cp.checkpoint_id,
+                "Checkpoint manifest was rejected by storage",
+            )
+            raise HTTPException(status_code=502, detail="Data plane rejected checkpoint commit")
+
+        _CHECKPOINT_DURATIONS.append(time.monotonic() - checkpoint_start)
+        logger.info("Checkpoint %s committed to data plane", active_cp.checkpoint_id)
+        _CHECKPOINT_SHARDS.pop(active_cp.checkpoint_id, None)
 
         # Mark the checkpoint as COMMITTED in the coordinator
-        if active_cp:
-            coord.update_checkpoint_state(active_cp.checkpoint_id, "COMMITTED")
+        coord.update_checkpoint_state(active_cp.checkpoint_id, "COMMITTED")
 
         try:
             coord.transition_run(run_id, RunState.COMMITTED)
@@ -579,8 +625,12 @@ def _register_routes(application: FastAPI) -> None:
         cp = coord.get_checkpoint(checkpoint_id)
         if cp is None:
             raise HTTPException(status_code=404, detail=f"Checkpoint {checkpoint_id!r} not found")
+        if cp.run_id != run_id:
+            raise HTTPException(status_code=404, detail=f"Checkpoint {checkpoint_id!r} not found")
 
         body = await request.body()
+        if not body:
+            raise HTTPException(status_code=400, detail="Shard body must not be empty")
         rank = int(request.headers.get("X-Shard-Rank", "0"))
 
         # Stream the data to the data plane in 4MB chunks
@@ -604,7 +654,29 @@ def _register_routes(application: FastAPI) -> None:
                 )
                 offset = end
 
-        result = await dp.write_shard(chunk_iterator())
+        try:
+            result = await dp.write_shard(chunk_iterator())
+        except Exception as exc:
+            logger.error("Shard upload failed for checkpoint %s: %s", checkpoint_id, exc)
+            await _abort_failed_checkpoint(
+                coord,
+                dp,
+                run_id,
+                checkpoint_id,
+                "Checkpoint shard upload failed",
+            )
+            raise HTTPException(status_code=502, detail="Shard upload failed") from exc
+
+        if not result.success:
+            logger.error("Data plane rejected shard upload for checkpoint %s", checkpoint_id)
+            await _abort_failed_checkpoint(
+                coord,
+                dp,
+                run_id,
+                checkpoint_id,
+                "Checkpoint shard upload was rejected by storage",
+            )
+            raise HTTPException(status_code=502, detail="Data plane rejected shard upload")
 
         # Track shard info for commit — use the same content-addressed key
         # format as the Rust data plane writer (writer.rs:content_addressed_key)
@@ -742,13 +814,25 @@ def _register_routes(application: FastAPI) -> None:
         active = sum(1 for r in runs if r.state in {RunState.RUNNING, RunState.CHECKPOINTING})
 
         dp = _get_dp_client(request)
+        dataplane_healthy = False
+        if dp and dp.connected:
+            try:
+                dataplane_healthy = (await dp.health_check()).healthy
+            except Exception:
+                dataplane_healthy = False
+
+        status = (
+            HealthStatusLevel.HEALTHY
+            if coord.etcd_connected and dataplane_healthy
+            else HealthStatusLevel.DEGRADED
+        )
         return HealthStatus(
-            status=HealthStatusLevel.HEALTHY,
+            status=status,
             version="0.2.0",
             uptime_seconds=round(coord.uptime_seconds, 2),
             active_runs=active,
             etcd_connected=coord.etcd_connected,
-            dataplane_connected=bool(dp and dp.connected),
+            dataplane_connected=dataplane_healthy,
         )
 
     @application.get("/api/metrics/summary", response_model=MetricsSummary, tags=["ops"])

@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use bytes::Bytes;
 use futures::StreamExt;
@@ -30,6 +33,7 @@ pub struct CheckpointServiceImpl {
     manifest_mgr: Arc<ManifestManager>,
     gc: Arc<GarbageCollector>,
     backpressure: Arc<BackpressureController>,
+    storage_healthy: Arc<AtomicBool>,
     #[allow(dead_code)]
     bucket: String,
 }
@@ -116,6 +120,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
 
         match result {
             Ok(result) => {
+                self.storage_healthy.store(true, Ordering::Relaxed);
                 self.backpressure.decrement();
                 metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
                 metrics::SHARD_WRITES_TOTAL
@@ -139,6 +144,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                 }))
             }
             Err(e) => {
+                self.storage_healthy.store(false, Ordering::Relaxed);
                 self.backpressure.decrement();
                 metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
                 metrics::SHARD_WRITES_TOTAL
@@ -282,6 +288,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
 
         match self.manifest_mgr.write_manifest(&manifest).await {
             Ok(key) => {
+                self.storage_healthy.store(true, Ordering::Relaxed);
                 metrics::CHECKPOINT_COMMITS_TOTAL
                     .with_label_values(&["success"])
                     .inc();
@@ -303,6 +310,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                 }))
             }
             Err(e) => {
+                self.storage_healthy.store(false, Ordering::Relaxed);
                 metrics::CHECKPOINT_COMMITS_TOTAL
                     .with_label_values(&["error"])
                     .inc();
@@ -388,7 +396,7 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             .with_label_values(&["health_check", "OK"])
             .inc();
         Ok(Response::new(proto::HealthResponse {
-            serving: true,
+            serving: self.storage_healthy.load(Ordering::Relaxed),
             queue_depth: self.backpressure.depth() as u64,
             memory_used_bytes: 0,
             active_uploads: 0,
@@ -417,6 +425,7 @@ pub async fn build_grpc_server(
     let manifest_mgr = Arc::new(ManifestManager::new(s3.clone(), config.s3_bucket.clone()));
     let gc = Arc::new(GarbageCollector::new(s3.clone(), config.s3_bucket.clone()));
     let backpressure = Arc::new(BackpressureController::new(config.backpressure_queue_depth));
+    let storage_healthy = Arc::new(AtomicBool::new(true));
 
     let svc = CheckpointServiceImpl {
         writer,
@@ -424,6 +433,7 @@ pub async fn build_grpc_server(
         manifest_mgr,
         gc,
         backpressure,
+        storage_healthy,
         bucket: config.s3_bucket,
     };
 

@@ -9,9 +9,13 @@ Tests validate:
 
 from __future__ import annotations
 
+import base64
+import json
+
+import httpx
 import pytest
 
-from controlplane.coordinator import Coordinator, InMemoryKVStore
+from controlplane.coordinator import Coordinator, EtcdKVStore, InMemoryKVStore
 from controlplane.models import RunConfig, RunState
 from controlplane.state_machine import InvalidTransitionError
 
@@ -24,6 +28,74 @@ def coord() -> Coordinator:
 @pytest.fixture
 def config() -> RunConfig:
     return RunConfig(name="unit-test-run", num_workers=2)
+
+
+class TestEtcdKVStore:
+    def test_http_gateway_round_trip_and_prefix(self) -> None:
+        values: dict[bytes, bytes] = {}
+
+        def decode(value: str) -> bytes:
+            return base64.b64decode(value)
+
+        def encode(value: bytes) -> str:
+            return base64.b64encode(value).decode()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            payload = json.loads(request.content or b"{}")
+            if request.url.path == "/v3/maintenance/status":
+                return httpx.Response(200, json={"version": "3.5.12"})
+            if request.url.path == "/v3/kv/put":
+                values[decode(payload["key"])] = decode(payload["value"])
+                return httpx.Response(200, json={})
+            if request.url.path == "/v3/kv/deleterange":
+                values.pop(decode(payload["key"]), None)
+                return httpx.Response(200, json={"deleted": "1"})
+            if request.url.path == "/v3/kv/range":
+                start = decode(payload["key"])
+                end = decode(payload["range_end"]) if "range_end" in payload else None
+                if end is None:
+                    matches = [(key, value) for key, value in values.items() if key == start]
+                else:
+                    matches = [
+                        (key, value)
+                        for key, value in sorted(values.items())
+                        if start <= key < end
+                    ]
+                return httpx.Response(200, json={
+                    "kvs": [
+                        {"key": encode(key), "value": encode(value)}
+                        for key, value in matches
+                    ],
+                })
+            return httpx.Response(404)
+
+        client = httpx.Client(
+            base_url="http://etcd:2379",
+            transport=httpx.MockTransport(handler),
+        )
+        store = EtcdKVStore(client=client)
+
+        store.put("/runs/a", b"one")
+        store.put("/runs/b", b"two")
+        store.put("/workers/a", b"worker")
+
+        assert store.get("/runs/a") == b"one"
+        assert store.get("/missing") is None
+        assert store.get_prefix("/runs/") == [
+            (b"/runs/a", b"one"),
+            (b"/runs/b", b"two"),
+        ]
+
+        store.delete("/runs/a")
+        assert store.get("/runs/a") is None
+
+    def test_connection_failure_is_reported(self) -> None:
+        client = httpx.Client(
+            base_url="http://etcd:2379",
+            transport=httpx.MockTransport(lambda _: httpx.Response(503)),
+        )
+        with pytest.raises(ConnectionError):
+            EtcdKVStore(client=client)
 
 
 # ---------------------------------------------------------------------------

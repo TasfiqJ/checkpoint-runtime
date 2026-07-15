@@ -9,11 +9,14 @@ The coordinator is responsible for:
 
 from __future__ import annotations
 
+import base64
 import logging
 import time
 from datetime import UTC, datetime
 from typing import Protocol, runtime_checkable
 from uuid import uuid4
+
+import httpx
 
 from controlplane.models import (
     CheckpointInfo,
@@ -89,35 +92,85 @@ class InMemoryKVStore:
 
 
 class EtcdKVStore:
-    """Thin adapter over the ``etcd3`` client library."""
+    """Synchronous adapter over etcd's built-in v3 HTTP gateway.
 
-    def __init__(self, host: str = "localhost", port: int = 2379) -> None:
+    Using the gateway avoids the unmaintained ``etcd3`` Python package and its
+    incompatible generated protobuf bindings.  The coordinator API is
+    synchronous, so a small shared ``httpx.Client`` is sufficient here.
+    """
+
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 2379,
+        *,
+        client: httpx.Client | None = None,
+    ) -> None:
+        self._client = client or httpx.Client(
+            base_url=f"http://{host}:{port}",
+            timeout=5.0,
+        )
         try:
-            import etcd3  # type: ignore[import-untyped]
-
-            self._client = etcd3.client(host=host, port=port)
-            self._client.status()
+            self._post("/v3/maintenance/status", {})
             logger.info("Connected to etcd at %s:%d", host, port)
-        except Exception:
-            raise ConnectionError(
-                f"Failed to connect to etcd at {host}:{port}"
-            )
+        except Exception as exc:
+            if client is None:
+                self._client.close()
+            raise ConnectionError(f"Failed to connect to etcd at {host}:{port}") from exc
+
+    @staticmethod
+    def _encode(value: str | bytes) -> str:
+        raw = value.encode() if isinstance(value, str) else value
+        return base64.b64encode(raw).decode()
+
+    @staticmethod
+    def _decode(value: str) -> bytes:
+        return base64.b64decode(value)
+
+    @staticmethod
+    def _prefix_end(prefix: bytes) -> bytes:
+        """Return the smallest byte string greater than every key with prefix."""
+        end = bytearray(prefix)
+        for index in range(len(end) - 1, -1, -1):
+            if end[index] < 0xFF:
+                end[index] += 1
+                return bytes(end[: index + 1])
+        return b"\0"
+
+    def _post(self, path: str, payload: dict[str, str]) -> dict:
+        response = self._client.post(path, json=payload)
+        response.raise_for_status()
+        return response.json()
 
     def get(self, key: str) -> bytes | None:
-        value, _ = self._client.get(key)
-        return value  # type: ignore[return-value]
+        result = self._post("/v3/kv/range", {"key": self._encode(key)})
+        values = result.get("kvs", [])
+        if not values:
+            return None
+        return self._decode(values[0]["value"])
 
     def put(self, key: str, value: bytes) -> None:
-        self._client.put(key, value)
+        self._post(
+            "/v3/kv/put",
+            {"key": self._encode(key), "value": self._encode(value)},
+        )
 
     def delete(self, key: str) -> None:
-        self._client.delete(key)
+        self._post("/v3/kv/deleterange", {"key": self._encode(key)})
 
     def get_prefix(self, prefix: str) -> list[tuple[bytes, bytes]]:
-        results: list[tuple[bytes, bytes]] = []
-        for value, meta in self._client.get_prefix(prefix):
-            results.append((meta.key, value))  # type: ignore[union-attr]
-        return results
+        raw_prefix = prefix.encode()
+        result = self._post(
+            "/v3/kv/range",
+            {
+                "key": self._encode(raw_prefix),
+                "range_end": self._encode(self._prefix_end(raw_prefix)),
+            },
+        )
+        return [
+            (self._decode(item["key"]), self._decode(item["value"]))
+            for item in result.get("kvs", [])
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +333,10 @@ class Coordinator:
         if raw is None:
             return None
         return CheckpointInfo.model_validate_json(raw)
+
+    def delete_checkpoint(self, checkpoint_id: str) -> None:
+        """Remove checkpoint metadata after its storage objects are pruned."""
+        self._kv.delete(_checkpoint_key(checkpoint_id))
 
     def list_checkpoints(self, run_id: str) -> list[CheckpointInfo]:
         entries = self._kv.get_prefix(f"{_KEY_PREFIX}/checkpoints/")
