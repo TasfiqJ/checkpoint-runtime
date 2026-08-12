@@ -1,0 +1,228 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {
+            "Checkpoint Throughput (with data)": {
+                "name": "Checkpoint Throughput (with data)",
+                "path": "::Checkpoint Throughput (with data)",
+                "id": "5caf8e3c69de9502316f05b73bddf913",
+                "groups": {},
+                "checks": {
+                        "create run 201": {
+                            "name": "create run 201",
+                            "path": "::Checkpoint Throughput (with data)::create run 201",
+                            "id": "9079dcf33817c86d4db483f74e4a538e",
+                            "passes": 68,
+                            "fails": 0
+                        },
+                        "start run 200": {
+                            "id": "6e51077d072ceffd849bfa6dbb1c9fc7",
+                            "passes": 68,
+                            "fails": 0,
+                            "name": "start run 200",
+                            "path": "::Checkpoint Throughput (with data)::start run 200"
+                        },
+                        "checkpoint triggered": {
+                            "name": "checkpoint triggered",
+                            "path": "::Checkpoint Throughput (with data)::checkpoint triggered",
+                            "id": "3bbf1b8106f9635d6ac515ce3e311a62",
+                            "passes": 204,
+                            "fails": 0
+                        },
+                        "shard uploaded": {
+                            "name": "shard uploaded",
+                            "path": "::Checkpoint Throughput (with data)::shard uploaded",
+                            "id": "ea4c76e7a683e19dd9f3df47cb80d49d",
+                            "passes": 204,
+                            "fails": 0
+                        },
+                        "commit 200": {
+                            "path": "::Checkpoint Throughput (with data)::commit 200",
+                            "id": "f241973a04fb5662fd818c8b30f4017a",
+                            "passes": 204,
+                            "fails": 0,
+                            "name": "commit 200"
+                        }
+                    }
+            }
+        },
+        "checks": {}
+    },
+    "metrics": {
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 816,
+            "thresholds": {
+                "rate<0.05": false
+            },
+            "value": 0
+        },
+        "checkpoint_latency": {
+            "count": 204,
+            "avg": 64.57352941176471,
+            "min": 48,
+            "med": 57,
+            "max": 169,
+            "p(90)": 88.70000000000002,
+            "p(95)": 101.69999999999999,
+            "thresholds": {
+                "p(95)<5000": false
+            }
+        },
+        "http_req_duration": {
+            "max": 71.728001,
+            "p(90)": 30.3400335,
+            "p(95)": 36.591038999999995,
+            "count": 816,
+            "avg": 17.027427187499985,
+            "min": 2.050639,
+            "med": 19.43505,
+            "thresholds": {
+                "p(95)<3000": false,
+                "p(99)<5000": false
+            }
+        },
+        "group_duration": {
+            "p(90)": 1760.625763,
+            "p(95)": 1792.5033526,
+            "count": 68,
+            "avg": 1708.9850526764708,
+            "min": 1663.046441,
+            "med": 1687.5920035,
+            "max": 1895.709808
+        },
+        "api_latency": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "count": 0,
+            "thresholds": {
+                "p(95)<1000": false
+            }
+        },
+        "http_req_duration{expected_response:true}": {
+            "med": 19.43505,
+            "max": 71.728001,
+            "p(90)": 30.3400335,
+            "p(95)": 36.591038999999995,
+            "count": 816,
+            "avg": 17.027427187499985,
+            "min": 2.050639
+        },
+        "data_sent": {
+            "rate": 3381683.4702986237,
+            "count": 214046456
+        },
+        "data_received": {
+            "count": 367608,
+            "rate": 5807.776126643911
+        },
+        "iterations": {
+            "count": 68,
+            "rate": 1.0743204081842233
+        },
+        "checks": {
+            "passes": 748,
+            "fails": 0,
+            "value": 1
+        },
+        "vus": {
+            "value": 2,
+            "min": 2,
+            "max": 4
+        },
+        "errors": {
+            "passes": 0,
+            "fails": 0,
+            "thresholds": {
+                "rate<0.1": false
+            },
+            "value": 0
+        },
+        "http_req_blocked": {
+            "med": 0.003771,
+            "max": 0.875505,
+            "p(90)": 0.006775,
+            "p(95)": 0.007895,
+            "count": 816,
+            "avg": 0.008660333333333325,
+            "min": 0.00163
+        },
+        "http_req_receiving": {
+            "p(95)": 0.12062925,
+            "count": 816,
+            "avg": 0.07954549509803918,
+            "min": 0.023001,
+            "med": 0.07461899999999999,
+            "max": 0.715866,
+            "p(90)": 0.1072355
+        },
+        "http_reqs": {
+            "count": 816,
+            "rate": 12.89184489821068
+        },
+        "http_req_connecting": {
+            "max": 0.26798,
+            "p(90)": 0,
+            "p(95)": 0,
+            "count": 816,
+            "avg": 0.0009857904411764706,
+            "min": 0,
+            "med": 0
+        },
+        "http_req_sending": {
+            "med": 0.0273565,
+            "max": 7.929735,
+            "p(90)": 0.3750555,
+            "p(95)": 0.4825755,
+            "count": 816,
+            "avg": 0.15853055514705888,
+            "min": 0.0054
+        },
+        "http_req_waiting": {
+            "max": 69.058986,
+            "p(90)": 30.051361,
+            "p(95)": 36.13235325,
+            "count": 816,
+            "avg": 16.789351137254922,
+            "min": 1.971185,
+            "med": 19.3597535
+        },
+        "checkpoint_successes": {
+            "count": 204,
+            "rate": 3.22296122455267
+        },
+        "iteration_duration": {
+            "max": 3895.76978,
+            "p(90)": 3761.1810953,
+            "p(95)": 3793.0388317,
+            "count": 68,
+            "avg": 3709.5950831911764,
+            "min": 3663.481195,
+            "med": 3688.3501145
+        },
+        "checkpoint_bytes": {
+            "count": 213909504,
+            "rate": 3379519.7889965405
+        },
+        "vus_max": {
+            "value": 4,
+            "min": 4,
+            "max": 4
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "count": 816
+        }
+    }
+}

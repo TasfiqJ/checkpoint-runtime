@@ -2,6 +2,8 @@
 
 These artifacts are unedited k6 `--summary-export` JSON files from August 12, 2026.
 
+The later multi-size, unique-payload comparison is documented in `shard-size-matrix/README.md`; its eight raw summaries supersede this initial dedup-prone 1 MiB comparison for assessing writer performance.
+
 ## Environment
 
 - Host: AMD Ryzen 7 5800X, 8 cores / 16 logical processors, 32 GiB RAM

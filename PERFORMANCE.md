@@ -212,3 +212,16 @@ The committed raw summaries are in `benchmarks/results/`. Both use the repositor
 | Failed checks / failed HTTP requests | 0 / 0 | 0 / 0 | no change |
 
 This workload shows a regression, not the historical projected improvement. A 1 MiB shard is smaller than the five-MiB multipart batch size, so it exercises a single final multipart part plus staging-object promotion. It does not measure the intended overlap for larger multi-part shards. The k6 process exited nonzero for both matched runs because unrelated API/HTTP latency thresholds were crossed, although every check passed and no HTTP request failed.
+
+## Recorded Shard-Size Matrix (August 12, 2026)
+
+A subsequent checkpoint-only A/B test compared the buffered and streaming writers with unique 1, 16, 64, and 256 MiB payloads. Both variants used the same current control plane and 1 MiB gRPC chunks; only the Rust writer image changed. Raw summaries and exact methodology are committed under `benchmarks/results/shard-size-matrix/`.
+
+| Shard size | Buffered throughput | Streaming throughput | Buffered p95 | Streaming p95 |
+|---:|---:|---:|---:|---:|
+| 1 MiB | 3.223 MiB/s | 3.177 MiB/s | 101.70 ms | 131.60 ms |
+| 16 MiB | 47.093 MiB/s | 43.508 MiB/s | 294.65 ms | 516.60 ms |
+| 64 MiB | 123.785 MiB/s | 111.762 MiB/s | 1,338.25 ms | 1,538.70 ms |
+| 256 MiB | 179.038 MiB/s | 137.025 MiB/s | 7,137.20 ms | 7,581.50 ms |
+
+No crossover was observed: the streaming implementation was slower and had higher p95 at every tested shard size. The 256 MiB runs crossed the configured five-second p95 threshold but had no failed checks or HTTP requests.
