@@ -10,12 +10,14 @@ import PerformancePage from './pages/PerformancePage';
 import DemoPage from './pages/DemoPage';
 import HowItWorksPage from './pages/HowItWorksPage';
 import TryLocallyPage from './pages/TryLocallyPage';
+import BenchmarksPage from './pages/BenchmarksPage';
 import ThemeToggle from './components/ThemeToggle';
 
 const desktopNavItems = [
   { to: '/how-it-works', label: 'How It Works', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
   { to: '/demo', label: 'Live Demo', highlight: true, icon: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z' },
   { to: '/try-locally', label: 'Try Locally', icon: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+  { to: '/benchmarks', label: 'Benchmarks', icon: 'M3 13.5h4.5V21H3v-7.5zm6.75-6h4.5V21h-4.5V7.5zm6.75-4.5H21v18h-4.5V3z' },
 ];
 
 const mobileNavItems = [
@@ -23,6 +25,7 @@ const mobileNavItems = [
   { to: '/how-it-works', label: 'How It Works' },
   { to: '/demo', label: 'Live Demo' },
   { to: '/try-locally', label: 'Try Locally' },
+  { to: '/benchmarks', label: 'Benchmarks' },
 ];
 
 /* ─── SVG curved edge for the slide-in menu ─── */
@@ -270,6 +273,7 @@ function App() {
           <Route path="/checkpoints" element={<CheckpointBrowser />} />
           <Route path="/health" element={<HealthPage />} />
           <Route path="/performance" element={<PerformancePage />} />
+          <Route path="/benchmarks" element={<BenchmarksPage />} />
         </Routes>
       </main>
     </div>

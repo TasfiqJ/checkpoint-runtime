@@ -2,6 +2,10 @@
 
 This directory contains the unedited k6 `--summary-export` JSON for an A/B comparison of the buffered and streaming Rust writers at 1, 16, 64, and 256 MiB.
 
+## Recovery measurement
+
+A separate recovery measurement ran 10 process-kill trials. The worst observed recovery was 9.689 seconds. Roughly 6 seconds of that window is a deliberate `RECOVERING` hold. Restarting the failed process is the orchestrator's responsibility; the runtime detects the failure and coordinates recovery once a replacement process is available.
+
 ## Method
 
 - Buffered writer: Rust data-plane source from `e999229cade9a56f56aa4eedfd7aeb515db97dfc`.
