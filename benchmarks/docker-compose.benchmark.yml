@@ -1,0 +1,24 @@
+services:
+  etcd:
+    container_name: ckpt-benchmark-etcd
+    ports: !override
+      - "12379:2379"
+      - "12380:2380"
+
+  minio:
+    container_name: ckpt-benchmark-minio
+    ports: !override
+      - "19000:9000"
+      - "19001:9001"
+
+  rust-dataplane:
+    container_name: ckpt-benchmark-dataplane
+    ports: !override
+      - "15051:50051"
+      - "19090:9090"
+
+  python-controlplane:
+    container_name: ckpt-benchmark-controlplane
+    ports: !override
+      - "18000:8000"
+      - "15052:50052"

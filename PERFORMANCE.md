@@ -2,14 +2,20 @@
 
 ## Overview
 
-This document presents profiling results, bottleneck analysis, and measured improvements for the checkpoint runtime's Rust data plane. All measurements were taken on a Ryzen 7 5800X (8C/16T) with 32 GB DDR4 and NVMe SSD, running the full Docker Compose stack.
+This document records a performance design and its validation status. The figures historically shown below were planning projections, not measured results. The repository contains no raw baseline run, no raw pre-optimization k6 summary, and no reproducible evidence for the previously stated 63% throughput increase or 45% p95 latency reduction.
+
+The proposed test host was a Ryzen 7 5800X (8C/16T) with 32 GB DDR4 and NVMe SSD running the full Docker Compose stack. That description is not a recorded baseline run.
 
 ## Methodology
 
-1. **Baseline profiling** using Linux `perf` inside the data plane container with `--privileged` mode
-2. **Flamegraph generation** using [flamegraph.pl](https://github.com/brendangregg/FlameGraph)
-3. **Load testing** using k6 with 4 concurrent checkpoint writers over 60 seconds
-4. **Before/after comparison** to validate optimizations
+The intended methodology was:
+
+1. Baseline profiling using Linux `perf` inside the data plane container with `--privileged` mode
+2. Flamegraph generation using [flamegraph.pl](https://github.com/brendangregg/FlameGraph)
+3. Load testing using k6 with 4 concurrent checkpoint writers over 60 seconds
+4. A before/after comparison using identical workload and environment settings
+
+No baseline command output, k6 JSON summary, environment manifest, or perf data was committed when the original figures were added. Consequently, the historical comparison cannot be reproduced from repository artifacts.
 
 ### Profiling Setup
 
@@ -24,7 +30,9 @@ docker compose up -d
 k6 run tests/load/checkpoint_load_test.js
 ```
 
-## Baseline Results
+## Unrecorded Baseline Assumptions
+
+The following values appeared in the original report, but no baseline run is recorded. They must be treated as assumptions used to illustrate the proposed design, not observations.
 
 ### Throughput
 
@@ -37,9 +45,9 @@ k6 run tests/load/checkpoint_load_test.js
 | Shard write throughput | 48 MB/s |
 | S3 upload throughput | 42 MB/s |
 
-### Baseline Flamegraph
+### Illustrative Baseline Flamegraph
 
-The baseline flamegraph revealed the following CPU time distribution:
+The original report assigned the following percentages. No `perf.data`, folded stack file, or command output is present to substantiate them, so this is an illustrative profile rather than a measured flamegraph:
 
 ```
 100% [total]
@@ -54,23 +62,25 @@ The baseline flamegraph revealed the following CPU time distribution:
  +--  5% other (metrics, tracing, GC)
 ```
 
-**Flamegraph SVG:** `profiling/results/checkpoint_write_baseline.svg`
+**Illustrative SVG:** `profiling/results/checkpoint_write_baseline.svg`. The SVG is not a substitute for the missing raw profile.
 
 ## Bottleneck Analysis
 
-### Bottleneck 1: Sequential Checksum Computation (18% CPU)
+### Bottleneck 1: Sequential Checksum Computation
 
-The SHA256 checksum was computed **synchronously** on each chunk as it arrived over the gRPC stream, blocking the write pipeline. Every `ShardChunk` message triggered a `sha256.update()` call before accumulating the chunk into the buffer, creating a serial bottleneck.
+Code inspection showed that SHA256 was computed synchronously. The former 18% CPU attribution was a projection and was not measured by a recorded run.
 
-### Bottleneck 2: Excessive Buffer Copies (10% CPU)
+### Bottleneck 2: Contiguous Buffer Copy
 
-Each incoming chunk was copied into a growing `BytesMut` buffer using `extend_from_slice`, then the entire accumulated buffer was passed to the S3 upload. This resulted in O(n) copies per chunk plus a final large allocation.
+Code inspection showed that each chunk was copied into a growing contiguous buffer before upload. The former 10% CPU attribution was not measured by a recorded run.
 
-### Bottleneck 3: Non-pipelined S3 Upload (22% CPU)
+### Bottleneck 3: Non-pipelined S3 Upload
 
-The S3 upload waited until all chunks were received before starting the upload. For large shards (100+ MB), this meant the network was idle during the entire receive phase.
+Code inspection showed that S3 upload waited until all chunks were received. The former 22% CPU attribution was not measured by a recorded run.
 
-## Optimizations Implemented
+## Proposed Optimized Path
+
+The design below was originally presented as implemented even though the corresponding code was absent. It is a proposed design until implementation and new benchmark artifacts are reviewed independently. Its performance figures remain projections regardless of implementation status.
 
 ### Fix 1: Pipelined Checksum Computation
 
@@ -82,21 +92,23 @@ After:  receive chunk -> channel.send() -> sha256 task (parallel)
                       -> S3 multipart upload (streaming)
 ```
 
-**Impact:** SHA256 overhead reduced from 18% to 6% of total CPU time.
+**Projected impact (unmeasured):** SHA256 overhead from 18% to 6% of total CPU time.
 
 ### Fix 2: Zero-Copy Buffer Management
 
 **Change:** Replaced `BytesMut::extend_from_slice` with a `Vec<Bytes>` chunk list. Instead of copying each chunk into a contiguous buffer, chunks are kept as a list of `Bytes` references and streamed directly to S3 multipart upload as individual parts.
 
-**Impact:** Buffer copy overhead reduced from 10% to 2% of total CPU time.
+**Projected impact (unmeasured):** buffer-copy overhead from 10% to 2% of total CPU time.
 
 ### Fix 3: Streaming S3 Multipart Upload
 
 **Change:** Switched from buffered single-part upload to S3 multipart upload. Each chunk (or batch of chunks reaching 5MB) is uploaded as a separate part while more chunks are still arriving. The S3 upload starts as soon as the first chunk batch is ready.
 
-**Impact:** Upload latency reduced by ~40% for shards > 10 MB, as network transfer overlaps with data reception.
+**Projected impact (unmeasured):** approximately 40% lower upload latency for shards larger than 10 MB.
 
-## After-Optimization Results
+## Historical Projections — Not Measured Results
+
+These are the original report's projected before/after values. They are retained for provenance, not as benchmark results. In particular, `(78 - 48) / 48 = 62.5%` was rounded to 63%, and `(1120 - 620) / 1120 = 44.6%` was rounded to 45%; neither percentage came from committed baseline and optimized runs.
 
 ### Throughput
 
@@ -109,7 +121,7 @@ After:  receive chunk -> channel.send() -> sha256 task (parallel)
 | Shard write throughput | 48 MB/s | 78 MB/s | **+63%** |
 | S3 upload throughput | 42 MB/s | 72 MB/s | **+71%** |
 
-### Optimized Flamegraph
+### Illustrative Optimized Flamegraph
 
 ```
 100% [total]
@@ -124,9 +136,11 @@ After:  receive chunk -> channel.send() -> sha256 task (parallel)
  +--  8% other (metrics, tracing, backpressure)
 ```
 
-**Flamegraph SVG:** `profiling/results/checkpoint_write_optimized.svg`
+**Illustrative SVG:** `profiling/results/checkpoint_write_optimized.svg`. No raw optimized profile accompanies it.
 
-## Load Test Results
+## Unverified Historical Load-Test Output
+
+The text below was previously labeled as a k6 result, but no matching raw k6 summary was committed. It is retained only to make the documentation correction explicit and must not be cited as a measured result.
 
 ### k6 Summary (4 VUs, 60s sustained)
 
@@ -142,7 +156,9 @@ scenarios: (100.00%) 3 scenarios, 30 max VUs, 3m35s max duration
      errors.........................: 0.81%  15 / 1847
 ```
 
-## Chaos Test Results
+## Unverified Historical Chaos-Test Claims
+
+No raw chaos-test logs or result artifacts accompany these tables. They are not validated performance measurements.
 
 ### Worker Kill Mid-Checkpoint
 
@@ -178,8 +194,21 @@ scenarios: (100.00%) 3 scenarios, 30 max VUs, 3m35s max duration
 
 ## Conclusions
 
-1. **Pipelining** the checksum computation with the S3 upload was the single largest improvement, delivering a 40% latency reduction.
-2. **Zero-copy buffer management** eliminated unnecessary allocations and reduced GC pressure.
-3. **Streaming multipart upload** overlaps network I/O with data reception, critical for large shards.
-4. The system **recovers cleanly** from worker failures within 10 seconds and handles network degradation via backpressure without data loss.
-5. Under sustained load (4 concurrent writers, 60s), the system maintains p95 latency under 620ms with <1% error rate.
+The original 63% throughput and 45% p95 latency claims were projections presented as measurements. Because no baseline run was recorded, they cannot be verified. Only results backed by committed raw artifacts from comparable pre-change and post-change builds should be reported as measured performance.
+
+## Recorded Implementation Comparison (August 12, 2026)
+
+The proposed path was implemented with a bounded gRPC-to-writer channel, a `spawn_blocking` SHA-256 worker fed by a second bounded channel, bounded five-MiB multipart batches, and `Vec<Bytes>` chunk storage rather than a full-shard contiguous allocation. Because the final object key contains the digest, multipart data is streamed to a temporary key and promoted to the content-addressed key after hashing completes.
+
+The committed raw summaries are in `benchmarks/results/`. Both use the repository's unchanged k6 workload: four constant checkpoint VUs for 60 seconds and 1 MiB payloads. Throughput below is `checkpoint_latency.count / 60`; since each completed cycle carries 1 MiB, the numeric value is also application payload MiB/s.
+
+| Metric | Recorded baseline | Recorded optimized | Actual change |
+|---|---:|---:|---:|
+| Completed checkpoint cycles | 198 | 192 | -3.03% |
+| Checkpoint throughput | 3.30 cycles/s | 3.20 cycles/s | -3.03% |
+| Application payload throughput | 3.30 MiB/s | 3.20 MiB/s | -3.03% |
+| Checkpoint latency average | 74.11 ms | 88.59 ms | +19.54% |
+| Checkpoint latency p95 | 137.45 ms | 149.60 ms | +8.84% |
+| Failed checks / failed HTTP requests | 0 / 0 | 0 / 0 | no change |
+
+This workload shows a regression, not the historical projected improvement. A 1 MiB shard is smaller than the five-MiB multipart batch size, so it exercises a single final multipart part plus staging-object promotion. It does not measure the intended overlap for larger multi-part shards. The k6 process exited nonzero for both matched runs because unrelated API/HTTP latency thresholds were crossed, although every check passed and no HTTP request failed.

@@ -633,8 +633,9 @@ def _register_routes(application: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="Shard body must not be empty")
         rank = int(request.headers.get("X-Shard-Rank", "0"))
 
-        # Stream the data to the data plane in 4MB chunks
-        chunk_size = 4 * 1024 * 1024
+        # Keep each protobuf message below gRPC's default 4 MiB message limit.
+        # The data plane combines these references into 5 MiB multipart batches.
+        chunk_size = 1024 * 1024
 
         # ShardChunk proto doesn't carry run_id, so we encode it as
         # "{run_id}/{checkpoint_id}" in the checkpoint_id field.  The Rust

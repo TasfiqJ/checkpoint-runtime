@@ -1,0 +1,271 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {
+            "API Stress": {
+                "name": "API Stress",
+                "path": "::API Stress",
+                "id": "da6fb7d959aaece413b439fb5181a314",
+                "groups": {},
+                "checks": {
+                        "health 200": {
+                            "name": "health 200",
+                            "path": "::API Stress::health 200",
+                            "id": "e58d08c2c6fc38cfcfa0a81dcb7ee98a",
+                            "passes": 231,
+                            "fails": 0
+                        },
+                        "runs 200": {
+                            "name": "runs 200",
+                            "path": "::API Stress::runs 200",
+                            "id": "8d3f1a15540c7a553175148ddf66cfe3",
+                            "passes": 231,
+                            "fails": 0
+                        },
+                        "workers 200": {
+                            "name": "workers 200",
+                            "path": "::API Stress::workers 200",
+                            "id": "ad6107e0bc6628bcf2154d2a6909f11c",
+                            "passes": 231,
+                            "fails": 0
+                        },
+                        "metrics 200": {
+                            "name": "metrics 200",
+                            "path": "::API Stress::metrics 200",
+                            "id": "18de0c76bb3c8124db9105542a08305d",
+                            "passes": 231,
+                            "fails": 0
+                        }
+                    }
+            },
+            "Checkpoint Throughput (with data)": {
+                "checks": {
+                    "create run 201": {
+                        "name": "create run 201",
+                        "path": "::Checkpoint Throughput (with data)::create run 201",
+                        "id": "9079dcf33817c86d4db483f74e4a538e",
+                        "passes": 64,
+                        "fails": 0
+                    },
+                    "start run 200": {
+                        "name": "start run 200",
+                        "path": "::Checkpoint Throughput (with data)::start run 200",
+                        "id": "6e51077d072ceffd849bfa6dbb1c9fc7",
+                        "passes": 64,
+                        "fails": 0
+                    },
+                    "checkpoint triggered": {
+                        "name": "checkpoint triggered",
+                        "path": "::Checkpoint Throughput (with data)::checkpoint triggered",
+                        "id": "3bbf1b8106f9635d6ac515ce3e311a62",
+                        "passes": 192,
+                        "fails": 0
+                    },
+                    "shard uploaded": {
+                        "name": "shard uploaded",
+                        "path": "::Checkpoint Throughput (with data)::shard uploaded",
+                        "id": "ea4c76e7a683e19dd9f3df47cb80d49d",
+                        "passes": 192,
+                        "fails": 0
+                    },
+                    "commit 200": {
+                        "name": "commit 200",
+                        "path": "::Checkpoint Throughput (with data)::commit 200",
+                        "id": "f241973a04fb5662fd818c8b30f4017a",
+                        "passes": 192,
+                        "fails": 0
+                    }
+                },
+                "name": "Checkpoint Throughput (with data)",
+                "path": "::Checkpoint Throughput (with data)",
+                "id": "5caf8e3c69de9502316f05b73bddf913",
+                "groups": {}
+            },
+            "Backpressure Validation": {
+                "name": "Backpressure Validation",
+                "path": "::Backpressure Validation",
+                "id": "a39fd60943076048a99e734f9173bec9",
+                "groups": {},
+                "checks": {
+                        "backpressure: status < 500": {
+                            "name": "backpressure: status < 500",
+                            "path": "::Backpressure Validation::backpressure: status < 500",
+                            "id": "9d6221c6a8349db0de2b71f3a1583172",
+                            "passes": 310,
+                            "fails": 0
+                        }
+                    }
+            }
+        },
+        "checks": {}
+    },
+    "metrics": {
+        "api_latency": {
+            "p(90)": 810.6884181000003,
+            "p(95)": 1010.5628425,
+            "count": 924,
+            "avg": 341.1579543809525,
+            "min": 0.371467,
+            "med": 236.941264,
+            "max": 1799.140836,
+            "thresholds": {
+                "p(95)<1000": true
+            }
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "count": 2002
+        },
+        "http_req_connecting": {
+            "p(95)": 0.1440997,
+            "count": 2002,
+            "avg": 0.032673701798201796,
+            "min": 0,
+            "med": 0,
+            "max": 20.170505,
+            "p(90)": 0
+        },
+        "http_req_receiving": {
+            "count": 2002,
+            "avg": 0.06929430469530466,
+            "min": 0.010131,
+            "med": 0.06434899999999999,
+            "max": 2.693761,
+            "p(90)": 0.10650210000000002,
+            "p(95)": 0.12360799999999983
+        },
+        "group_duration": {
+            "count": 357,
+            "avg": 3028.2736758879555,
+            "min": 195.368331,
+            "med": 1718.093636,
+            "max": 32924.539327,
+            "p(90)": 4972.6250469999995,
+            "p(95)": 7980.521246599961
+        },
+        "http_reqs": {
+            "count": 2002,
+            "rate": 11.483156206583406
+        },
+        "data_received": {
+            "count": 12008152,
+            "rate": 68876.86571848
+        },
+        "iteration_duration": {
+            "med": 2237.843797,
+            "max": 33124.91072,
+            "p(90)": 5172.827965400001,
+            "p(95)": 8181.335163599961,
+            "count": 357,
+            "avg": 3745.771411442576,
+            "min": 696.364571
+        },
+        "http_req_duration": {
+            "min": 0.371467,
+            "med": 45.2889865,
+            "max": 32921.768555,
+            "p(90)": 3750.18980620001,
+            "p(95)": 5179.62641105,
+            "count": 2002,
+            "avg": 1596.0318495269735,
+            "thresholds": {
+                "p(99)<5000": true,
+                "p(95)<3000": true
+            }
+        },
+        "vus_max": {
+            "value": 24,
+            "min": 0,
+            "max": 24
+        },
+        "data_sent": {
+            "count": 201568908,
+            "rate": 1156167.4610162035
+        },
+        "http_req_sending": {
+            "p(90)": 0.08781260000000018,
+            "p(95)": 0.3879918999999995,
+            "count": 2002,
+            "avg": 0.06673813486513482,
+            "min": 0.00402,
+            "med": 0.012220499999999999,
+            "max": 6.127088
+        },
+        "checkpoint_latency": {
+            "max": 462,
+            "p(90)": 112.80000000000001,
+            "p(95)": 149.5999999999999,
+            "count": 192,
+            "avg": 88.59375,
+            "min": 60,
+            "med": 76,
+            "thresholds": {
+                "p(95)<5000": false
+            }
+        },
+        "vus": {
+            "value": 1,
+            "min": 0,
+            "max": 20
+        },
+        "iterations": {
+            "count": 357,
+            "rate": 2.04769568718795
+        },
+        "errors": {
+            "passes": 0,
+            "fails": 0,
+            "thresholds": {
+                "rate<0.1": false
+            },
+            "value": 0
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 2002,
+            "thresholds": {
+                "rate<0.05": false
+            },
+            "value": 0
+        },
+        "http_req_blocked": {
+            "count": 2002,
+            "avg": 0.04170836013986013,
+            "min": 0.00135,
+            "med": 0.00364,
+            "max": 20.272309,
+            "p(90)": 0.008409000000000002,
+            "p(95)": 0.1939994999999998
+        },
+        "http_req_waiting": {
+            "avg": 1595.895817087414,
+            "min": 0.320544,
+            "med": 44.850837,
+            "max": 32921.666859,
+            "p(90)": 3750.09397740001,
+            "p(95)": 5179.57758635,
+            "count": 2002
+        },
+        "http_req_duration{expected_response:true}": {
+            "min": 0.371467,
+            "med": 45.2889865,
+            "max": 32921.768555,
+            "p(90)": 3750.18980620001,
+            "p(95)": 5179.62641105,
+            "count": 2002,
+            "avg": 1596.0318495269735
+        },
+        "checks": {
+            "passes": 1938,
+            "fails": 0,
+            "value": 1
+        }
+    }
+}

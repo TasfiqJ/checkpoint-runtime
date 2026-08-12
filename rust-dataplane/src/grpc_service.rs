@@ -5,6 +5,7 @@ use std::sync::{
 
 use bytes::Bytes;
 use futures::StreamExt;
+use tokio::sync::mpsc;
 use tonic::{Request, Response, Status, Streaming};
 use tracing::{error, info, instrument};
 
@@ -15,8 +16,6 @@ use crate::checkpoint::reader::ShardReader;
 use crate::checkpoint::writer::ShardWriter;
 use crate::config::Config;
 use crate::metrics;
-use crate::retry::RetryPolicy;
-use crate::storage::checksum::StreamingChecksum;
 use crate::storage::s3::S3Client;
 
 pub mod common {
@@ -57,16 +56,13 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
 
         let start = std::time::Instant::now();
         let mut stream = request.into_inner();
-        let mut chunks: Vec<Bytes> = Vec::new();
-        let mut shard_id = String::new();
-        let mut checkpoint_id = String::new();
-        let mut hasher = StreamingChecksum::new();
 
         self.backpressure.increment();
         metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
 
-        while let Some(chunk_result) = stream.next().await {
-            let chunk = chunk_result.map_err(|e| {
+        let first_chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(error)) => {
                 self.backpressure.decrement();
                 metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
                 metrics::SHARD_WRITES_TOTAL
@@ -75,19 +71,16 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
                 metrics::GRPC_REQUESTS_TOTAL
                     .with_label_values(&["write_shard", "ERROR"])
                     .inc();
-                Status::internal(format!("Stream error: {}", e))
-            })?;
-
-            if shard_id.is_empty() {
-                shard_id = chunk.shard_id.clone();
-                checkpoint_id = chunk.checkpoint_id.clone();
+                return Err(Status::internal(format!("Stream error: {error}")));
             }
-
-            hasher.update(&chunk.data);
-            chunks.push(Bytes::from(chunk.data));
-        }
-
-        let (_checksum, _total_bytes) = hasher.finalize();
+            None => {
+                self.backpressure.decrement();
+                metrics::BACKPRESSURE_QUEUE_DEPTH.set(self.backpressure.depth() as i64);
+                return Err(Status::invalid_argument("Shard stream was empty"));
+            }
+        };
+        let shard_id = first_chunk.shard_id.clone();
+        let checkpoint_id = first_chunk.checkpoint_id.clone();
 
         // ShardChunk doesn't carry run_id, so the Python control plane
         // encodes it as "run_id/checkpoint_id" in the checkpoint_id field.
@@ -101,22 +94,56 @@ impl proto::checkpoint_service_server::CheckpointService for CheckpointServiceIm
             (checkpoint_id.clone(), checkpoint_id.clone())
         };
 
-        // Write shard with retry for transient S3 failures
+        // Start the writer after reading only enough metadata to determine the
+        // staging prefix. The bounded channel propagates S3 backpressure to gRPC.
+        let (chunk_tx, chunk_rx) = mpsc::channel(8);
         let writer = self.writer.clone();
-        let run_id_clone = run_id.clone();
-        let checkpoint_id_clone = real_checkpoint_id.clone();
-        let shard_id_clone = shard_id.clone();
-        let retry = RetryPolicy::new(3, 500);
-        let result = retry
-            .execute(|| {
-                let w = writer.clone();
-                let rid = run_id_clone.clone();
-                let cid = checkpoint_id_clone.clone();
-                let sid = shard_id_clone.clone();
-                let c = chunks.clone();
-                async move { w.write_shard(&rid, &cid, &sid, c).await }
-            })
-            .await;
+        let writer_run_id = run_id.clone();
+        let writer_checkpoint_id = real_checkpoint_id.clone();
+        let writer_shard_id = shard_id.clone();
+        let writer_task = tokio::spawn(async move {
+            writer
+                .write_shard_stream(
+                    &writer_run_id,
+                    &writer_checkpoint_id,
+                    &writer_shard_id,
+                    chunk_rx,
+                )
+                .await
+        });
+
+        let writer_is_receiving = chunk_tx
+            .send(Ok(Bytes::from(first_chunk.data)))
+            .await
+            .is_ok();
+
+        if writer_is_receiving {
+            while let Some(chunk_result) = stream.next().await {
+                match chunk_result {
+                    Ok(chunk) => {
+                        if chunk.shard_id != shard_id || chunk.checkpoint_id != checkpoint_id {
+                            let _ = chunk_tx
+                                .send(Err("Shard metadata changed within the stream".to_string()))
+                                .await;
+                            break;
+                        }
+                        if chunk_tx.send(Ok(Bytes::from(chunk.data))).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = chunk_tx.send(Err(format!("Stream error: {error}"))).await;
+                        break;
+                    }
+                }
+            }
+        }
+        drop(chunk_tx);
+
+        let result = match writer_task.await {
+            Ok(result) => result,
+            Err(error) => Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>),
+        };
 
         match result {
             Ok(result) => {

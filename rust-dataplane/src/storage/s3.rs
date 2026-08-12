@@ -1,4 +1,5 @@
 use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
 use bytes::Bytes;
 use tracing::instrument;
 
@@ -58,6 +59,103 @@ impl S3Client {
             .bucket(bucket)
             .key(key)
             .body(ByteStream::from(data))
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn create_multipart_upload(
+        &self,
+        bucket: &str,
+        key: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let response = self
+            .client
+            .create_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .send()
+            .await?;
+
+        response
+            .upload_id()
+            .map(str::to_owned)
+            .ok_or_else(|| "S3 did not return an upload ID".into())
+    }
+
+    pub async fn upload_part(
+        &self,
+        bucket: &str,
+        key: &str,
+        upload_id: &str,
+        part_number: i32,
+        data: Bytes,
+    ) -> Result<CompletedPart, Box<dyn std::error::Error + Send + Sync>> {
+        let response = self
+            .client
+            .upload_part()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .part_number(part_number)
+            .body(ByteStream::from(data))
+            .send()
+            .await?;
+
+        Ok(CompletedPart::builder()
+            .part_number(part_number)
+            .set_e_tag(response.e_tag().map(str::to_owned))
+            .build())
+    }
+
+    pub async fn complete_multipart_upload(
+        &self,
+        bucket: &str,
+        key: &str,
+        upload_id: &str,
+        parts: Vec<CompletedPart>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let upload = CompletedMultipartUpload::builder()
+            .set_parts(Some(parts))
+            .build();
+        self.client
+            .complete_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .multipart_upload(upload)
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn abort_multipart_upload(
+        &self,
+        bucket: &str,
+        key: &str,
+        upload_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.client
+            .abort_multipart_upload()
+            .bucket(bucket)
+            .key(key)
+            .upload_id(upload_id)
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn copy_object(
+        &self,
+        bucket: &str,
+        source_key: &str,
+        destination_key: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.client
+            .copy_object()
+            .bucket(bucket)
+            .copy_source(format!("{bucket}/{source_key}"))
+            .key(destination_key)
             .send()
             .await?;
         Ok(())
