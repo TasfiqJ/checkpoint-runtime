@@ -206,6 +206,17 @@ def _schedule_worker_group_restart(
     """
     global _WORKER_RESTART_IN_FLIGHT
 
+    shared_run_path = os.environ.get("SHARED_RUN_ID_PATH", "").strip()
+    if shared_run_path:
+        supervised_run_id = _get_supervised_run_id()
+        if supervised_run_id != run_id:
+            logger.warning(
+                "Refusing to restart supervised worker group %s for unrelated run %s",
+                supervised_run_id or "<unavailable>",
+                run_id,
+            )
+            return False
+
     container_names = tuple(
         name.strip()
         for name in os.environ.get(

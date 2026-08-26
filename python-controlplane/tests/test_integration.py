@@ -501,6 +501,32 @@ class TestWorkerEndpoints:
         assert rest_api._WORKER_RESTART_IN_FLIGHT is None
         assert run.run_id not in rest_api._WORKER_RESTART_LAST_ATTEMPT
 
+    def test_worker_group_restart_rejects_unrelated_supervised_run(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        coordinator = Coordinator(use_memory=True)
+        run = coordinator.create_run(RunConfig(name="unrelated-run", num_workers=1))
+        heartbeat_mgr = HeartbeatManager(coordinator=coordinator)
+        worker_mgr = WorkerManager(coordinator, heartbeat_mgr)
+        worker = worker_mgr.register_worker(run.run_id, rank=0)
+        shared_run_path = tmp_path / "run_id"
+        shared_run_path.write_text("different-supervised-run", encoding="utf-8")
+        monkeypatch.setenv("SHARED_RUN_ID_PATH", str(shared_run_path))
+
+        assert not rest_api._schedule_worker_group_restart(
+            run.run_id,
+            coordinator,
+            heartbeat_mgr,
+            worker_mgr,
+        )
+
+        persisted_worker = coordinator.list_workers(run.run_id)[0]
+        assert persisted_worker.status == "ACTIVE"
+        assert worker_mgr.get_worker(worker.worker_id).status == "ACTIVE"
+        assert heartbeat_mgr.get_lease(worker.worker_id) is not None
+
 
 # ---------------------------------------------------------------------------
 # Datasets
