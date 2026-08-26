@@ -48,3 +48,4 @@ profiling/flamegraphs/*.svg
 htmlcov/
 .coverage
 coverage.xml
+.vercel
