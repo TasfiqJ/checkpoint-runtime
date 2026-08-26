@@ -33,11 +33,16 @@ def api():
                 pass
             time.sleep(2)
         else:
-            pytest.skip("Control plane not reachable — is Docker Compose running?")
+            message = "Control plane not reachable — is Docker Compose running?"
+            if os.getenv("E2E_REQUIRED") == "1":
+                pytest.fail(message)
+            pytest.skip(message)
         yield client
 
 
-def _wait_for_state(api: httpx.Client, run_id: str, target: str, timeout: int = TIMEOUT) -> dict:
+def _wait_for_state(
+    api: httpx.Client, run_id: str, target: str, timeout: int = TIMEOUT
+) -> dict:
     """Poll until a run reaches the target state or timeout."""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -57,16 +62,20 @@ def _wait_for_state(api: httpx.Client, run_id: str, target: str, timeout: int = 
 # E2E Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.e2e
 def test_full_checkpoint_cycle(api: httpx.Client):
     """Start run -> train N steps -> checkpoint -> commit -> verify."""
 
     # 1. Create a training run
-    create_resp = api.post("/api/runs", json={
-        "name": "e2e-test-run",
-        "num_workers": 2,
-        "checkpoint_interval": 5,
-    })
+    create_resp = api.post(
+        "/api/runs",
+        json={
+            "name": "e2e-test-run",
+            "num_workers": 2,
+            "checkpoint_interval": 5,
+        },
+    )
     assert create_resp.status_code in (200, 201), (
         f"Failed to create run: {create_resp.status_code} {create_resp.text}"
     )
@@ -100,7 +109,9 @@ def test_full_checkpoint_cycle(api: httpx.Client):
             reached_checkpointing = True
             break
         time.sleep(1)
-    assert reached_checkpointing, f"Run never entered CHECKPOINTING (last state: {state})"
+    assert reached_checkpointing, (
+        f"Run never entered CHECKPOINTING (last state: {state})"
+    )
 
     # 6. Commit the checkpoint
     commit_resp = api.post(f"/api/runs/{run_id}/commit")
@@ -127,11 +138,14 @@ def test_failure_recovery(api: httpx.Client):
     """Start run -> checkpoint -> simulate failure -> recover -> verify."""
 
     # 1. Create and start a run
-    create_resp = api.post("/api/runs", json={
-        "name": "e2e-recovery-test",
-        "num_workers": 2,
-        "checkpoint_interval": 5,
-    })
+    create_resp = api.post(
+        "/api/runs",
+        json={
+            "name": "e2e-recovery-test",
+            "num_workers": 2,
+            "checkpoint_interval": 5,
+        },
+    )
     assert create_resp.status_code in (200, 201)
     run = create_resp.json()
     run_id = run.get("run_id") or run.get("id")
@@ -148,9 +162,12 @@ def test_failure_recovery(api: httpx.Client):
     time.sleep(2)
 
     # 3. Simulate failure by reporting worker failure
-    fail_resp = api.post(f"/api/runs/{run_id}/fail", json={
-        "reason": "e2e-test: simulated worker crash",
-    })
+    fail_resp = api.post(
+        f"/api/runs/{run_id}/fail",
+        json={
+            "reason": "e2e-test: simulated worker crash",
+        },
+    )
     if fail_resp.status_code == 200:
         # 4. Wait for FAILED state
         _wait_for_state(api, run_id, "FAILED", timeout=15)
@@ -161,25 +178,12 @@ def test_failure_recovery(api: httpx.Client):
             f"Resume failed: {resume_resp.status_code} {resume_resp.text}"
         )
 
-        # 6. Verify run transitions through RECOVERING
-        deadline = time.time() + TIMEOUT
-        saw_recovering = False
-        final_state = ""
-        while time.time() < deadline:
-            r = api.get(f"/api/runs/{run_id}")
-            state = r.json().get("state", r.json().get("status", "")).upper()
-            if state == "RECOVERING":
-                saw_recovering = True
-            if state == "RUNNING":
-                final_state = state
-                break
-            final_state = state
-            time.sleep(1)
-
-        # The run should have transitioned through RECOVERING back to RUNNING
-        assert saw_recovering or final_state == "RUNNING", (
-            f"Expected RECOVERING->RUNNING, got final state: {final_state}"
-        )
+        # 6. The first call only begins recovery. A worker calls resume again
+        # after it has restored the checkpoint.
+        assert resume_resp.json()["state"] == "RECOVERING"
+        restored_resp = api.post(f"/api/runs/{run_id}/resume")
+        assert restored_resp.status_code == 200, restored_resp.text
+        assert restored_resp.json()["state"] == "RUNNING"
 
 
 @pytest.mark.e2e

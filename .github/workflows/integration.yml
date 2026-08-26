@@ -23,34 +23,33 @@ jobs:
         run: docker compose build rust-dataplane
 
       - name: Build training workers
-        run: docker compose build training-worker-0
+        run: docker compose build training-worker-0 training-worker-1
 
-      - name: Run control plane health check
+      - name: Start the full checkpoint stack
         run: |
-          # Run controlplane standalone (falls back to in-memory store)
-          docker run -d --name test-cp -p 8000:8000 \
-            -e PYTHONPATH=/app/src \
-            checkpoint-runtime-python-controlplane
-          sleep 8
-          # Retry health check
-          for i in 1 2 3 4 5; do
-            if curl -sf http://localhost:8000/api/health; then
-              echo ""
-              echo "Control plane healthy!"
+          docker compose up -d \
+            minio etcd rust-dataplane python-controlplane \
+            training-worker-0 training-worker-1
+
+      - name: Wait for a healthy control plane
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/api/health | grep -q '"status":"HEALTHY"'; then
               exit 0
             fi
-            echo "Attempt $i: waiting..."
-            sleep 3
+            sleep 2
           done
-          echo "Health check failed — showing logs:"
-          docker logs test-cp --tail=30
+          docker compose ps
+          docker compose logs --tail=100 python-controlplane rust-dataplane etcd minio
           exit 1
 
       - name: Run E2E tests
+        env:
+          E2E_REQUIRED: "1"
         run: |
           pip install httpx pytest
-          PYTHONPATH=python-controlplane/src pytest tests/e2e/ -v -m "not skip" --tb=short || echo "E2E tests require full stack"
+          PYTHONPATH=python-controlplane/src pytest tests/e2e/ -v -m e2e --tb=short
 
       - name: Cleanup
         if: always()
-        run: docker stop test-cp 2>/dev/null; docker rm test-cp 2>/dev/null; true
+        run: docker compose down --volumes --remove-orphans

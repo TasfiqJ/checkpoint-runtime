@@ -370,7 +370,10 @@ export default function DemoPage() {
         const res = await fetch(`${API_BASE}/api/runs`);
         if (res.ok) {
           const runs: RunStatus[] = await res.json();
-          const active = runs.find(r => ['RUNNING', 'CHECKPOINTING', 'COMMITTED', 'FAILED', 'RECOVERING'].includes(r.state));
+          const active = [...runs].reverse().find(r =>
+            ['RUNNING', 'CHECKPOINTING', 'COMMITTED', 'FAILED', 'RECOVERING'].includes(r.state)
+            && r.active_workers >= 2,
+          );
           if (active) {
             foundRunId = active.run_id;
             break;
@@ -383,7 +386,7 @@ export default function DemoPage() {
         setRunId(foundRunId);
         addEvent(`Connected to run ${foundRunId.slice(0, 8)}...`, 'success');
       } else {
-        addEvent('No active runs found. Ensure workers are running.', 'error');
+        addEvent('No healthy training run found. The workers are still starting or need attention.', 'error');
       }
     } catch (e) {
       addEvent(`Failed to start demo: ${e}`, 'error');

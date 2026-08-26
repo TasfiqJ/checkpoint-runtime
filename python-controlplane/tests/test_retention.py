@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from controlplane.coordinator import Coordinator
-from controlplane.models import RunConfig
+from controlplane.models import RunConfig, RunState
 from controlplane.retention import CheckpointRetentionManager, RetentionConfig
 
 
@@ -103,3 +103,115 @@ def test_retention_does_not_prune_metadata_when_s3_delete_fails() -> None:
         manager.run_once(now=now)
 
     assert coordinator.get_checkpoint(checkpoint.checkpoint_id) is not None
+
+
+def test_retention_removes_entire_old_run_prefixes() -> None:
+    now = datetime.now(UTC)
+    coordinator = Coordinator(use_memory=True)
+    objects = [
+        object_record("old-run/checkpoint-a/rank-0.bin", now - timedelta(days=2), 10),
+        object_record("old-run/checkpoint-a/_manifest.json", now - timedelta(days=2), 2),
+        object_record("new-run/checkpoint-b/rank-0.bin", now, 20),
+        object_record("new-run/checkpoint-b/_manifest.json", now, 2),
+    ]
+    s3 = FakeS3(objects)
+    manager = CheckpointRetentionManager(
+        coordinator,
+        RetentionConfig(keep_committed_per_run=30, keep_runs=1),
+        s3_client=s3,
+    )
+
+    result = manager.run_once(now=now)
+
+    assert result.checkpoints_deleted == 1
+    assert result.objects_deleted == 2
+    assert result.bytes_freed == 12
+    assert set(s3.deleted) == {
+        "old-run/checkpoint-a/rank-0.bin",
+        "old-run/checkpoint-a/_manifest.json",
+    }
+
+
+def test_retention_preserves_only_newest_failed_recovery_run() -> None:
+    now = datetime.now(UTC)
+    coordinator = Coordinator(use_memory=True)
+    older_failed = coordinator.create_run(RunConfig(name="older-failed", num_workers=1))
+    coordinator.transition_run(older_failed.run_id, RunState.RUNNING)
+    coordinator.transition_run(older_failed.run_id, RunState.FAILED)
+    newest_failed = coordinator.create_run(RunConfig(name="newest-failed", num_workers=1))
+    coordinator.transition_run(newest_failed.run_id, RunState.RUNNING)
+    coordinator.transition_run(newest_failed.run_id, RunState.FAILED)
+    older_status = coordinator.get_run(older_failed.run_id)
+    newest_status = coordinator.get_run(newest_failed.run_id)
+    assert older_status is not None
+    assert newest_status is not None
+    older_status.updated_at = now - timedelta(minutes=1)
+    newest_status.updated_at = now
+    coordinator._persist_run(older_status)
+    coordinator._persist_run(newest_status)
+
+    objects = [
+        object_record(
+            f"{older_failed.run_id}/checkpoint-old/_manifest.json",
+            now - timedelta(days=3),
+        ),
+        object_record(
+            f"{newest_failed.run_id}/checkpoint-recovery/_manifest.json",
+            now - timedelta(days=2),
+        ),
+        object_record("recent-run/checkpoint-new/_manifest.json", now),
+    ]
+    s3 = FakeS3(objects)
+    manager = CheckpointRetentionManager(
+        coordinator,
+        RetentionConfig(keep_runs=1),
+        s3_client=s3,
+    )
+
+    manager.run_once(now=now)
+
+    assert s3.deleted == [
+        f"{older_failed.run_id}/checkpoint-old/_manifest.json",
+    ]
+
+
+def test_retention_preserves_all_newest_failed_timestamp_ties() -> None:
+    now = datetime.now(UTC)
+    coordinator = Coordinator(use_memory=True)
+    failed_runs = []
+    for name in ("older", "tied-a", "tied-b"):
+        run = coordinator.create_run(RunConfig(name=name, num_workers=1))
+        coordinator.transition_run(run.run_id, RunState.RUNNING)
+        coordinator.transition_run(run.run_id, RunState.FAILED)
+        failed_runs.append(run)
+
+    for run, updated_at in zip(
+        failed_runs,
+        (now - timedelta(minutes=1), now, now),
+        strict=True,
+    ):
+        status = coordinator.get_run(run.run_id)
+        assert status is not None
+        status.updated_at = updated_at
+        coordinator._persist_run(status)
+
+    objects = [
+        object_record(
+            f"{run.run_id}/checkpoint-{index}/_manifest.json",
+            now - timedelta(days=3 - index),
+        )
+        for index, run in enumerate(failed_runs)
+    ]
+    objects.append(object_record("recent-run/checkpoint-new/_manifest.json", now))
+    s3 = FakeS3(objects)
+    manager = CheckpointRetentionManager(
+        coordinator,
+        RetentionConfig(keep_runs=1),
+        s3_client=s3,
+    )
+
+    manager.run_once(now=now)
+
+    assert s3.deleted == [
+        f"{failed_runs[0].run_id}/checkpoint-0/_manifest.json",
+    ]

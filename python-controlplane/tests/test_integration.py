@@ -5,9 +5,12 @@ Tests exercise the full stack: HTTP request -> FastAPI -> Coordinator.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
+from controlplane.api import rest as rest_api
 from controlplane.api.grpc_client import (
     AbortResult,
     CommitResult,
@@ -16,6 +19,9 @@ from controlplane.api.grpc_client import (
 )
 from controlplane.api.rest import create_app
 from controlplane.coordinator import Coordinator
+from controlplane.heartbeat import HeartbeatManager
+from controlplane.models import RunConfig
+from controlplane.worker_manager import WorkerManager
 
 
 class FakeDataPlane:
@@ -149,7 +155,9 @@ class TestCheckpointEndpoints:
         assert data["state"] == "PENDING"
 
     def test_commit_without_uploaded_shard_is_rejected(
-        self, client: TestClient, run_id: str,
+        self,
+        client: TestClient,
+        run_id: str,
     ) -> None:
         client.post(f"/api/runs/{run_id}/start")
         client.post(f"/api/runs/{run_id}/checkpoint?step=100")
@@ -186,7 +194,8 @@ class TestCheckpointEndpoints:
         app.state.dp_client = data_plane
         client = TestClient(app)
         run_id = client.post(
-            "/api/runs", json={"name": "upload-failure", "num_workers": 1},
+            "/api/runs",
+            json={"name": "upload-failure", "num_workers": 1},
         ).json()["run_id"]
         client.post(f"/api/runs/{run_id}/start")
         checkpoint = client.post(f"/api/runs/{run_id}/checkpoint?step=100").json()
@@ -208,7 +217,8 @@ class TestCheckpointEndpoints:
         app.state.dp_client = data_plane
         client = TestClient(app)
         run_id = client.post(
-            "/api/runs", json={"name": "shard-rejection", "num_workers": 1},
+            "/api/runs",
+            json={"name": "shard-rejection", "num_workers": 1},
         ).json()["run_id"]
         client.post(f"/api/runs/{run_id}/start")
         checkpoint = client.post(f"/api/runs/{run_id}/checkpoint?step=100").json()
@@ -230,7 +240,8 @@ class TestCheckpointEndpoints:
         app.state.dp_client = data_plane
         client = TestClient(app)
         run_id = client.post(
-            "/api/runs", json={"name": "commit-failure", "num_workers": 1},
+            "/api/runs",
+            json={"name": "commit-failure", "num_workers": 1},
         ).json()["run_id"]
         client.post(f"/api/runs/{run_id}/start")
         checkpoint = client.post(f"/api/runs/{run_id}/checkpoint?step=100").json()
@@ -333,6 +344,163 @@ class TestWorkerEndpoints:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    def test_worker_rank_and_live_run_count(
+        self,
+        client: TestClient,
+        run_id: str,
+    ) -> None:
+        worker_resp = client.post(
+            "/api/workers/register",
+            json={
+                "run_id": run_id,
+                "hostname": "worker-1",
+                "rank": 1,
+            },
+        )
+        assert worker_resp.status_code == 201
+        assert worker_resp.json()["rank"] == 1
+
+        run_resp = client.get(f"/api/runs/{run_id}")
+        assert run_resp.status_code == 200
+        assert run_resp.json()["active_workers"] == 1
+
+    def test_superseded_worker_heartbeat_is_rejected_without_reregistration(self) -> None:
+        coordinator = Coordinator(use_memory=True)
+        heartbeat_mgr = HeartbeatManager(coordinator=coordinator)
+        worker_mgr = WorkerManager(coordinator, heartbeat_mgr)
+        app = create_app(coordinator=coordinator, use_lifespan=False)
+        app.state.worker_mgr = worker_mgr
+        client = TestClient(app)
+        run_id = client.post(
+            "/api/runs",
+            json={"name": "worker-generation", "num_workers": 1},
+        ).json()["run_id"]
+
+        old_worker = client.post(
+            "/api/workers/register",
+            json={"run_id": run_id, "rank": 0},
+        ).json()
+        new_worker = client.post(
+            "/api/workers/register",
+            json={"run_id": run_id, "rank": 0},
+        ).json()
+
+        response = client.post(
+            f"/api/workers/{old_worker['worker_id']}/heartbeat",
+            json={"step": 100},
+        )
+
+        assert response.status_code == 409
+
+        coordinator.mark_worker_dead(run_id, new_worker["worker_id"])
+        worker_mgr.get_worker(new_worker["worker_id"]).status = "DEAD"
+        timed_out_response = client.post(
+            f"/api/workers/{new_worker['worker_id']}/heartbeat",
+            json={"step": 100},
+        )
+        assert timed_out_response.status_code == 404
+
+    def test_deregistered_worker_heartbeat_is_a_tombstone_conflict(self) -> None:
+        coordinator = Coordinator(use_memory=True)
+        heartbeat_mgr = HeartbeatManager(coordinator=coordinator)
+        worker_mgr = WorkerManager(coordinator, heartbeat_mgr)
+        app = create_app(coordinator=coordinator, use_lifespan=False)
+        app.state.worker_mgr = worker_mgr
+        client = TestClient(app)
+        run_id = client.post(
+            "/api/runs",
+            json={"name": "worker-deregister", "num_workers": 1},
+        ).json()["run_id"]
+        worker = client.post(
+            "/api/workers/register",
+            json={"run_id": run_id, "rank": 0},
+        ).json()
+
+        deregister_response = client.post(f"/api/workers/{worker['worker_id']}/deregister")
+        heartbeat_response = client.post(
+            f"/api/workers/{worker['worker_id']}/heartbeat",
+            json={"step": 1},
+        )
+
+        assert deregister_response.status_code == 200
+        assert heartbeat_response.status_code == 409
+
+    def test_worker_group_restart_deduplicates_in_flight_attempts(
+        self,
+        monkeypatch,
+    ) -> None:
+        coordinator = Coordinator(use_memory=True)
+        run = coordinator.create_run(RunConfig(name="restart-dedupe", num_workers=1))
+        heartbeat_mgr = HeartbeatManager(coordinator=coordinator)
+        worker_mgr = WorkerManager(coordinator, heartbeat_mgr)
+        worker_mgr.register_worker(run.run_id, rank=0)
+        restart_targets = []
+
+        class DeferredThread:
+            def __init__(self, *, target, **_) -> None:
+                self.target = target
+
+            def start(self) -> None:
+                restart_targets.append(self.target)
+
+        monkeypatch.setattr(rest_api.threading, "Thread", DeferredThread)
+        monkeypatch.setattr(
+            rest_api.subprocess,
+            "run",
+            lambda *_, **__: SimpleNamespace(returncode=0, stderr=""),
+        )
+        with rest_api._WORKER_RESTART_STATE_LOCK:
+            rest_api._WORKER_RESTART_LAST_ATTEMPT.clear()
+            rest_api._WORKER_RESTART_IN_FLIGHT = None
+
+        assert rest_api._schedule_worker_group_restart(
+            run.run_id,
+            coordinator,
+            heartbeat_mgr,
+            worker_mgr,
+        )
+        assert rest_api._schedule_worker_group_restart(
+            run.run_id,
+            coordinator,
+            heartbeat_mgr,
+            worker_mgr,
+        )
+        assert len(restart_targets) == 1
+
+        restart_targets[0]()
+        assert rest_api._WORKER_RESTART_IN_FLIGHT is None
+
+    def test_worker_group_restart_thread_start_failure_is_retryable(
+        self,
+        monkeypatch,
+    ) -> None:
+        coordinator = Coordinator(use_memory=True)
+        run = coordinator.create_run(RunConfig(name="restart-thread-failure", num_workers=1))
+        heartbeat_mgr = HeartbeatManager(coordinator=coordinator)
+        worker_mgr = WorkerManager(coordinator, heartbeat_mgr)
+        worker_mgr.register_worker(run.run_id, rank=0)
+
+        class BrokenThread:
+            def __init__(self, **_) -> None:
+                pass
+
+            def start(self) -> None:
+                raise RuntimeError("thread unavailable")
+
+        monkeypatch.setattr(rest_api.threading, "Thread", BrokenThread)
+        with rest_api._WORKER_RESTART_STATE_LOCK:
+            rest_api._WORKER_RESTART_LAST_ATTEMPT.clear()
+            rest_api._WORKER_RESTART_IN_FLIGHT = None
+
+        assert not rest_api._schedule_worker_group_restart(
+            run.run_id,
+            coordinator,
+            heartbeat_mgr,
+            worker_mgr,
+        )
+        assert rest_api._WORKER_RESTART_IN_FLIGHT is None
+        assert run.run_id not in rest_api._WORKER_RESTART_LAST_ATTEMPT
+
 
 # ---------------------------------------------------------------------------
 # Datasets
@@ -341,11 +509,14 @@ class TestWorkerEndpoints:
 
 class TestDatasetEndpoints:
     def test_register_dataset(self, client: TestClient) -> None:
-        resp = client.post("/api/datasets", json={
-            "dataset_id": "ds-001",
-            "uri": "s3://bucket/data",
-            "sharding_policy": "RANGE_SHARDING",
-        })
+        resp = client.post(
+            "/api/datasets",
+            json={
+                "dataset_id": "ds-001",
+                "uri": "s3://bucket/data",
+                "sharding_policy": "RANGE_SHARDING",
+            },
+        )
         assert resp.status_code == 201
         data = resp.json()
         assert data["dataset_id"] == "ds-001"

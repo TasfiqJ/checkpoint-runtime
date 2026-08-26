@@ -12,6 +12,7 @@ the Coordinator and HeartbeatManager that handles:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 
 from controlplane.coordinator import Coordinator
@@ -49,6 +50,33 @@ class WorkerManager:
         if heartbeat_mgr is not None:
             heartbeat_mgr.on_worker_failure(self._on_worker_failure)
 
+        self._rehydrate_workers()
+
+    def _rehydrate_workers(self) -> None:
+        """Restore persisted worker indexes after a control-plane restart.
+
+        Worker metadata lives in the coordinator's KV store, while these
+        lookup tables and heartbeat leases are intentionally in memory.  A
+        fresh control-plane process must rebuild the in-memory side before
+        existing workers send their next heartbeat; otherwise every heartbeat
+        is rejected as coming from an unknown worker forever.
+        """
+        restored = 0
+        for worker in self._coordinator.list_workers():
+            self._workers[worker.worker_id] = worker
+            self._run_workers.setdefault(worker.run_id, set()).add(worker.worker_id)
+            self._rank_counters[worker.run_id] = max(
+                self._rank_counters.get(worker.run_id, 0),
+                worker.rank + 1,
+            )
+
+            if self._heartbeat_mgr is not None and worker.status == "ACTIVE":
+                self._heartbeat_mgr.register(worker.worker_id, worker.run_id)
+            restored += 1
+
+        if restored:
+            logger.info("Rehydrated %d persisted workers", restored)
+
     # -- registration -------------------------------------------------------
 
     def register_worker(
@@ -56,6 +84,7 @@ class WorkerManager:
         run_id: str,
         hostname: str = "",
         metadata: dict | None = None,
+        rank: int | None = None,
     ) -> WorkerInfo:
         """Register a new worker for a training run.
 
@@ -64,10 +93,38 @@ class WorkerManager:
 
         Returns the newly created WorkerInfo.
         """
-        rank = self._next_rank(run_id)
+        if rank is None:
+            rank = self._next_rank(run_id)
+        else:
+            self._rank_counters[run_id] = max(
+                self._rank_counters.get(run_id, 0),
+                rank + 1,
+            )
+
+            # A restarted DDP process keeps its logical rank.  Retire any
+            # earlier registration for that rank so API/UI worker counts do
+            # not grow on every recovery cycle.
+            for old_worker_id in list(self._run_workers.get(run_id, set())):
+                old_worker = self._workers.get(old_worker_id)
+                if (
+                    old_worker is not None
+                    and old_worker.rank == rank
+                    and old_worker.status == "ACTIVE"
+                ):
+                    old_worker.status = "SUPERSEDED"
+                    with contextlib.suppress(KeyError):
+                        self._coordinator.mark_worker_dead(
+                            run_id,
+                            old_worker_id,
+                            status="SUPERSEDED",
+                        )
+                    if self._heartbeat_mgr is not None:
+                        self._heartbeat_mgr.unregister(old_worker_id)
 
         worker = self._coordinator.register_worker(
-            run_id=run_id, rank=rank, hostname=hostname,
+            run_id=run_id,
+            rank=rank,
+            hostname=hostname,
         )
 
         # Update in-memory index
@@ -80,21 +137,31 @@ class WorkerManager:
 
         logger.info(
             "Registered worker %s (rank %d, host=%s) for run %s",
-            worker.worker_id, rank, hostname, run_id,
+            worker.worker_id,
+            rank,
+            hostname,
+            run_id,
         )
         return worker
 
     def deregister_worker(self, worker_id: str) -> None:
         """Remove a worker from tracking and heartbeat monitoring.
 
-        Does not remove the worker from the coordinator's persistent store
-        (it remains as a historical record), but marks it inactive locally.
+        Keeps the coordinator record for history but persists it as DEAD so a
+        future control-plane process cannot rehydrate a departed worker.
         """
-        worker = self._workers.pop(worker_id, None)
+        worker = self._workers.get(worker_id)
         if worker is not None:
+            worker.status = "DEREGISTERED"
             run_workers = self._run_workers.get(worker.run_id)
             if run_workers:
                 run_workers.discard(worker_id)
+            with contextlib.suppress(KeyError):
+                self._coordinator.mark_worker_dead(
+                    worker.run_id,
+                    worker_id,
+                    status="DEREGISTERED",
+                )
 
         if self._heartbeat_mgr is not None:
             self._heartbeat_mgr.unregister(worker_id)
@@ -117,6 +184,13 @@ class WorkerManager:
         worker = self._workers.get(worker_id)
         if worker is None:
             logger.warning("Heartbeat from unregistered worker %s", worker_id)
+            return None
+        if worker.status != "ACTIVE":
+            logger.warning(
+                "Heartbeat from superseded worker %s (status=%s)",
+                worker_id,
+                worker.status,
+            )
             return None
 
         # Update coordinator persistent state
@@ -151,11 +225,7 @@ class WorkerManager:
     def get_run_workers(self, run_id: str) -> list[WorkerInfo]:
         """Return all tracked workers for a given run."""
         worker_ids = self._run_workers.get(run_id, set())
-        return [
-            self._workers[wid]
-            for wid in worker_ids
-            if wid in self._workers
-        ]
+        return [self._workers[wid] for wid in worker_ids if wid in self._workers]
 
     def list_all_workers(self) -> list[WorkerInfo]:
         """Return all tracked workers across all runs."""
@@ -163,10 +233,7 @@ class WorkerManager:
 
     def active_worker_count(self, run_id: str) -> int:
         """Return the number of active workers for a run."""
-        return sum(
-            1 for w in self.get_run_workers(run_id)
-            if w.status == "ACTIVE"
-        )
+        return sum(1 for w in self.get_run_workers(run_id) if w.status == "ACTIVE")
 
     # -- failure handling ---------------------------------------------------
 
@@ -183,7 +250,8 @@ class WorkerManager:
             worker.status = "DEAD"
             logger.warning(
                 "Worker %s (run %s) marked DEAD by failure callback",
-                worker_id, run_id,
+                worker_id,
+                run_id,
             )
 
     # -- internal helpers ---------------------------------------------------

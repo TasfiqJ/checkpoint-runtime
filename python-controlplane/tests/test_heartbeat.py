@@ -25,7 +25,8 @@ class TestWorkerLease:
     def test_touch_updates_heartbeat(self) -> None:
         lease = WorkerLease(worker_id="w1", run_id="r1")
         old_hb = lease.last_heartbeat
-        time.sleep(0.01)
+        # Windows' monotonic clock can tick at roughly 15.6 ms intervals.
+        time.sleep(0.02)
         lease.touch(step=10)
         assert lease.last_heartbeat > old_hb
         assert lease.last_step == 10
@@ -57,9 +58,10 @@ class TestHeartbeatManager:
 
     def test_unregister(self) -> None:
         mgr = HeartbeatManager()
-        mgr.register("w1", "r1")
+        lease = mgr.register("w1", "r1")
         mgr.unregister("w1")
         assert mgr.get_lease("w1") is None
+        assert lease.is_alive is False
 
     def test_record_heartbeat(self) -> None:
         mgr = HeartbeatManager()
@@ -134,13 +136,62 @@ class TestWorkerManager:
         assert w0.rank == 0
         assert w1.rank == 1
 
+    def test_rehydrates_persisted_workers_after_restart(self) -> None:
+        coord = Coordinator(use_memory=True)
+        run = coord.create_run(RunConfig(name="test", num_workers=2))
+        original = WorkerManager(coordinator=coord)
+        w0 = original.register_worker(run.run_id, hostname="node-0")
+        w1 = original.register_worker(run.run_id, hostname="node-1")
+
+        restarted_heartbeats = HeartbeatManager()
+        restarted = WorkerManager(
+            coordinator=coord,
+            heartbeat_mgr=restarted_heartbeats,
+        )
+
+        assert {w.worker_id for w in restarted.get_run_workers(run.run_id)} == {
+            w0.worker_id,
+            w1.worker_id,
+        }
+        assert restarted_heartbeats.get_lease(w0.worker_id) is not None
+        assert restarted.update_worker_heartbeat(w0.worker_id, step=42) is not None
+        assert restarted.register_worker(run.run_id).rank == 2
+
+    def test_explicit_rank_replaces_previous_registration(self) -> None:
+        coord = Coordinator(use_memory=True)
+        run = coord.create_run(RunConfig(name="test", num_workers=2))
+        mgr = WorkerManager(coordinator=coord)
+        old_rank_zero = mgr.register_worker(run.run_id, rank=0)
+        rank_one = mgr.register_worker(run.run_id, rank=1)
+
+        new_rank_zero = mgr.register_worker(run.run_id, rank=0)
+
+        assert new_rank_zero.rank == 0
+        assert mgr.get_worker(old_rank_zero.worker_id).status == "SUPERSEDED"
+        assert mgr.get_worker(rank_one.worker_id).status == "ACTIVE"
+        assert mgr.active_worker_count(run.run_id) == 2
+
+        assert mgr.update_worker_heartbeat(old_rank_zero.worker_id, step=999) is None
+        persisted_old = next(
+            worker
+            for worker in coord.list_workers(run.run_id)
+            if worker.worker_id == old_rank_zero.worker_id
+        )
+        assert persisted_old.status == "SUPERSEDED"
+
     def test_deregister_worker(self) -> None:
         coord = Coordinator(use_memory=True)
         run = coord.create_run(RunConfig(name="test", num_workers=1))
         mgr = WorkerManager(coordinator=coord)
         w = mgr.register_worker(run.run_id)
         mgr.deregister_worker(w.worker_id)
-        assert mgr.get_worker(w.worker_id) is None
+        assert mgr.get_worker(w.worker_id).status == "DEREGISTERED"
+        assert coord.list_workers(run.run_id)[0].status == "DEREGISTERED"
+
+        heartbeat_mgr = HeartbeatManager()
+        restarted_mgr = WorkerManager(coord, heartbeat_mgr)
+        assert restarted_mgr.get_worker(w.worker_id).status == "DEREGISTERED"
+        assert heartbeat_mgr.get_lease(w.worker_id) is None
 
     def test_get_run_workers(self) -> None:
         coord = Coordinator(use_memory=True)
@@ -210,12 +261,18 @@ class TestRecoveryManager:
         run_id = self._create_running_run(coord)
         coord.transition_run(run_id, RunState.FAILED)
 
-        rmgr = RecoveryManager(coordinator=coord, auto_recover=False)
+        restarted_runs: list[str] = []
+        rmgr = RecoveryManager(
+            coordinator=coord,
+            auto_recover=False,
+            restart_worker_group=lambda failed_run_id: restarted_runs.append(failed_run_id) or True,
+        )
         assert rmgr.recover_run(run_id) is True
 
         status = coord.get_run(run_id)
         assert status is not None
-        assert status.state == RunState.RUNNING
+        assert status.state == RunState.RECOVERING
+        assert restarted_runs == [run_id]
 
     def test_manual_recovery_non_failed_run(self) -> None:
         coord = Coordinator(use_memory=True)
@@ -232,9 +289,15 @@ class TestRecoveryManager:
     def test_auto_recovery_on_failure(self) -> None:
         coord = Coordinator(use_memory=True)
         run_id = self._create_running_run(coord)
+        restarted_runs: list[str] = []
 
         hb = HeartbeatManager(config=HeartbeatConfig(dead_threshold_seconds=0.0))
-        _rmgr = RecoveryManager(coordinator=coord, heartbeat_mgr=hb, auto_recover=True)
+        _rmgr = RecoveryManager(
+            coordinator=coord,
+            heartbeat_mgr=hb,
+            auto_recover=True,
+            restart_worker_group=lambda failed_run_id: restarted_runs.append(failed_run_id) or True,
+        )
 
         w = coord.register_worker(run_id, rank=0)
         hb.register(w.worker_id, run_id)
@@ -246,10 +309,12 @@ class TestRecoveryManager:
 
         hb._check_leases()
 
-        # Run should have been auto-recovered to RUNNING
+        # Recovery is not declared complete until a restarted worker restores
+        # its checkpoint and explicitly resumes the run.
         status = coord.get_run(run_id)
         assert status is not None
-        assert status.state == RunState.RUNNING
+        assert status.state == RunState.RECOVERING
+        assert restarted_runs == [run_id]
 
     def test_abort_pending_checkpoints_on_failure(self) -> None:
         coord = Coordinator(use_memory=True)
@@ -267,6 +332,29 @@ class TestRecoveryManager:
         updated_cp = coord.get_checkpoint(cp.checkpoint_id)
         assert updated_cp is not None
         assert updated_cp.state == "FAILED"
+        status = coord.get_run(run_id)
+        assert status is not None
+        assert status.state == RunState.FAILED
+
+    def test_auto_recovery_without_supervisor_remains_failed(self) -> None:
+        coord = Coordinator(use_memory=True)
+        run_id = self._create_running_run(coord)
+        hb = HeartbeatManager(config=HeartbeatConfig(dead_threshold_seconds=0.0))
+        _rmgr = RecoveryManager(
+            coordinator=coord,
+            heartbeat_mgr=hb,
+            auto_recover=True,
+        )
+        hb.register("worker-no-supervisor", run_id)
+        lease = hb.get_lease("worker-no-supervisor")
+        assert lease is not None
+        lease.last_heartbeat = time.monotonic() - 100
+
+        hb._check_leases()
+
+        status = coord.get_run(run_id)
+        assert status is not None
+        assert status.state == RunState.FAILED
 
     def test_recovery_of_terminal_run_skipped(self) -> None:
         coord = Coordinator(use_memory=True)

@@ -48,10 +48,14 @@ import asyncio
 import contextlib
 import logging
 import os
+import subprocess
+import threading
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from functools import partial
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -105,12 +109,16 @@ _CHECKPOINT_SHARDS: dict[str, list[GrpcShardInfo]] = {}  # checkpoint_id -> shar
 _VISITORS: dict[str, dict] = {}  # session_id -> {country, country_code, flag, last_seen, ip}
 _ACTIVITY_FEED: list[dict] = []  # [{message, flag, timestamp}] max 50
 _IP_COUNTRY_CACHE: dict[str, dict] = {}  # ip -> {country, country_code, flag}
+_WORKER_RESTART_LAST_ATTEMPT: dict[str, float] = {}
+_WORKER_RESTART_RETRY_SECONDS = 30.0
+_WORKER_RESTART_STATE_LOCK = threading.Lock()
+_WORKER_RESTART_IN_FLIGHT: str | None = None
 
 
 def _ip_to_flag(country_code: str) -> str:
     """Convert 2-letter country code to flag emoji."""
     if not country_code or len(country_code) != 2:
-        return "\U0001F310"  # 🌐 globe
+        return "\U0001f310"  # 🌐 globe
     return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in country_code.upper())
 
 
@@ -121,11 +129,12 @@ async def _lookup_country(ip: str) -> dict:
 
     # Skip private/local IPs
     if ip.startswith(("127.", "10.", "172.", "192.168.", "::1", "0.0.0.0")):
-        result = {"country": "Local", "country_code": "", "flag": "\U0001F4BB"}  # 💻
+        result = {"country": "Local", "country_code": "", "flag": "\U0001f4bb"}  # 💻
         _IP_COUNTRY_CACHE[ip] = result
         return result
 
     import httpx
+
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.get(
@@ -144,18 +153,21 @@ async def _lookup_country(ip: str) -> dict:
     except Exception:
         pass
 
-    result = {"country": "Unknown", "country_code": "", "flag": "\U0001F310"}
+    result = {"country": "Unknown", "country_code": "", "flag": "\U0001f310"}
     _IP_COUNTRY_CACHE[ip] = result
     return result
 
 
-def _add_activity(message: str, flag: str = "\U0001F310"):
+def _add_activity(message: str, flag: str = "\U0001f310"):
     """Add an event to the activity feed (max 50 items)."""
-    _ACTIVITY_FEED.insert(0, {
-        "message": message,
-        "flag": flag,
-        "timestamp": time.time(),
-    })
+    _ACTIVITY_FEED.insert(
+        0,
+        {
+            "message": message,
+            "flag": flag,
+            "timestamp": time.time(),
+        },
+    )
     if len(_ACTIVITY_FEED) > 50:
         _ACTIVITY_FEED.pop()
 
@@ -166,6 +178,163 @@ def _clean_stale_visitors():
     stale = [sid for sid, v in _VISITORS.items() if now - v["last_seen"] > 45]
     for sid in stale:
         del _VISITORS[sid]
+
+
+def _get_supervised_run_id() -> str | None:
+    """Read the run ID owned by the configured Docker worker group."""
+    path_value = os.environ.get("SHARED_RUN_ID_PATH", "").strip()
+    if not path_value:
+        return None
+    try:
+        run_id = Path(path_value).read_text().strip()
+        return run_id or None
+    except OSError:
+        return None
+
+
+def _schedule_worker_group_restart(
+    run_id: str,
+    coordinator: Coordinator,
+    heartbeat_mgr: HeartbeatManager,
+    worker_mgr: WorkerManager,
+) -> bool:
+    """Restart all configured DDP workers as one generation.
+
+    A single-rank restart can leave the surviving rank waiting in a different
+    rendezvous generation. Marking every old registration dead and restarting
+    the complete group avoids that split-brain state.
+    """
+    global _WORKER_RESTART_IN_FLIGHT
+
+    container_names = tuple(
+        name.strip()
+        for name in os.environ.get(
+            "WORKER_CONTAINERS",
+            "ckpt-worker-0,ckpt-worker-1",
+        ).split(",")
+        if name.strip()
+    )
+    if not container_names:
+        logger.error("Cannot restart run %s: WORKER_CONTAINERS is empty", run_id)
+        return False
+
+    with _WORKER_RESTART_STATE_LOCK:
+        if _WORKER_RESTART_IN_FLIGHT is not None:
+            logger.info(
+                "Worker-group restart already in flight for run %s",
+                _WORKER_RESTART_IN_FLIGHT,
+            )
+            return run_id == _WORKER_RESTART_IN_FLIGHT
+        now = time.monotonic()
+        last_attempt = _WORKER_RESTART_LAST_ATTEMPT.get(run_id, 0.0)
+        if now - last_attempt < _WORKER_RESTART_RETRY_SECONDS:
+            logger.info("Worker-group restart already scheduled for run %s", run_id)
+            return True
+        _WORKER_RESTART_LAST_ATTEMPT[run_id] = now
+        _WORKER_RESTART_IN_FLIGHT = run_id
+
+    try:
+        for worker in coordinator.list_workers(run_id):
+            if worker.status == "ACTIVE":
+                with contextlib.suppress(KeyError):
+                    coordinator.mark_worker_dead(run_id, worker.worker_id)
+            local_worker = worker_mgr.get_worker(worker.worker_id)
+            if local_worker is not None:
+                local_worker.status = "DEAD"
+            heartbeat_mgr.unregister(worker.worker_id)
+    except Exception:
+        with _WORKER_RESTART_STATE_LOCK:
+            _WORKER_RESTART_LAST_ATTEMPT.pop(run_id, None)
+            if run_id == _WORKER_RESTART_IN_FLIGHT:
+                _WORKER_RESTART_IN_FLIGHT = None
+        raise
+
+    def restart() -> None:
+        global _WORKER_RESTART_IN_FLIGHT
+        succeeded = False
+        try:
+            for attempt in range(1, 4):
+                try:
+                    result = subprocess.run(
+                        ["docker", "restart", *container_names],
+                        capture_output=True,
+                        text=True,
+                        timeout=45,
+                    )
+                    if result.returncode == 0:
+                        succeeded = True
+                        logger.info(
+                            "Restarted worker group for run %s: %s",
+                            run_id,
+                            ", ".join(container_names),
+                        )
+                        return
+                    logger.error(
+                        "Worker-group restart attempt %d failed for run %s: %s",
+                        attempt,
+                        run_id,
+                        result.stderr.strip()[:500],
+                    )
+                except Exception:
+                    logger.exception(
+                        "Worker-group restart attempt %d failed for run %s",
+                        attempt,
+                        run_id,
+                    )
+                time.sleep(attempt * 2)
+        finally:
+            with _WORKER_RESTART_STATE_LOCK:
+                if not succeeded:
+                    # Let the durable reconciliation loop retry immediately.
+                    _WORKER_RESTART_LAST_ATTEMPT.pop(run_id, None)
+                if run_id == _WORKER_RESTART_IN_FLIGHT:
+                    _WORKER_RESTART_IN_FLIGHT = None
+
+    try:
+        restart_thread = threading.Thread(
+            target=restart,
+            name=f"worker-restart-{run_id[:8]}",
+            daemon=True,
+        )
+        restart_thread.start()
+    except Exception:
+        logger.exception("Could not start worker-group restart thread for run %s", run_id)
+        with _WORKER_RESTART_STATE_LOCK:
+            _WORKER_RESTART_LAST_ATTEMPT.pop(run_id, None)
+            if run_id == _WORKER_RESTART_IN_FLIGHT:
+                _WORKER_RESTART_IN_FLIGHT = None
+        return False
+    return True
+
+
+async def _reconcile_worker_recovery(
+    coordinator: Coordinator,
+    heartbeat_mgr: HeartbeatManager,
+    worker_mgr: WorkerManager,
+) -> None:
+    """Durably retry incomplete worker-group recovery until quorum returns."""
+    while True:
+        try:
+            run_id = _get_supervised_run_id()
+            run = coordinator.get_run(run_id) if run_id else None
+            if run is not None and run.state == RunState.RECOVERING:
+                registered_workers = coordinator.list_workers(run.run_id)
+                active_workers = [
+                    worker for worker in registered_workers if worker.status == "ACTIVE"
+                ]
+                if registered_workers and len(active_workers) < run.num_workers:
+                    _schedule_worker_group_restart(
+                        run.run_id,
+                        coordinator,
+                        heartbeat_mgr,
+                        worker_mgr,
+                    )
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Worker recovery reconciliation failed")
+            await asyncio.sleep(10)
 
 
 # ---------------------------------------------------------------------------
@@ -191,14 +360,33 @@ async def lifespan(app: FastAPI):
         coordinator=coord,
     )
     worker_mgr = WorkerManager(coordinator=coord, heartbeat_mgr=heartbeat_mgr)
-    recovery_mgr = RecoveryManager(coordinator=coord, heartbeat_mgr=heartbeat_mgr)
+    auto_restart = os.environ.get("AUTO_RESTART_WORKERS", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    restart_worker_group = None
+    if auto_restart:
+        restart_worker_group = partial(
+            _schedule_worker_group_restart,
+            coordinator=coord,
+            heartbeat_mgr=heartbeat_mgr,
+            worker_mgr=worker_mgr,
+        )
+    recovery_mgr = RecoveryManager(
+        coordinator=coord,
+        heartbeat_mgr=heartbeat_mgr,
+        auto_recover=auto_restart,
+        restart_worker_group=restart_worker_group,
+    )
     telemetry_mgr = get_telemetry_manager()
     telemetry_mgr.setup()
     retention_mgr = CheckpointRetentionManager(coord, RetentionConfig.from_env())
 
     # Connect to data plane gRPC
-    dp_address = os.environ.get("DATAPLANE_GRPC_URL",
-                                   os.environ.get("DATAPLANE_GRPC_ADDRESS", "rust-dataplane:50051"))
+    dp_address = os.environ.get(
+        "DATAPLANE_GRPC_URL", os.environ.get("DATAPLANE_GRPC_ADDRESS", "rust-dataplane:50051")
+    )
     dp_client = DataPlaneClient(address=dp_address)
     try:
         await dp_client.connect()
@@ -218,10 +406,20 @@ async def lifespan(app: FastAPI):
 
     await heartbeat_mgr.start_monitoring()
     await retention_mgr.start()
+    recovery_reconcile_task = None
+    if auto_restart:
+        recovery_reconcile_task = asyncio.create_task(
+            _reconcile_worker_recovery(coord, heartbeat_mgr, worker_mgr),
+            name="worker-recovery-reconciler",
+        )
     logger.info("Phase 3 subsystems initialized")
 
     yield
 
+    if recovery_reconcile_task is not None:
+        recovery_reconcile_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await recovery_reconcile_task
     await retention_mgr.stop()
     await dp_client.close()
     await heartbeat_mgr.stop_monitoring()
@@ -295,6 +493,17 @@ def _publish_event(request: Request, run_id: str, event_type: str, data: str) ->
             logger.warning("Dropping SSE event for run %s (queue full)", run_id)
 
 
+def _with_live_worker_count(
+    coordinator: Coordinator,
+    status: RunStatus,
+) -> RunStatus:
+    """Populate the derived worker count from persisted worker records."""
+    status.active_workers = sum(
+        1 for worker in coordinator.list_workers(status.run_id) if worker.status == "ACTIVE"
+    )
+    return status
+
+
 async def _abort_failed_checkpoint(
     coordinator: Coordinator,
     dp_client: DataPlaneClient | None,
@@ -334,7 +543,8 @@ def _register_routes(application: FastAPI) -> None:
 
     @application.get("/api/runs", response_model=list[RunStatus], tags=["runs"])
     async def list_runs(request: Request) -> list[RunStatus]:
-        return _get_coordinator(request).list_runs()
+        coord = _get_coordinator(request)
+        return [_with_live_worker_count(coord, status) for status in coord.list_runs()]
 
     @application.post("/api/runs", response_model=RunStatus, status_code=201, tags=["runs"])
     async def create_run(config: RunConfig, request: Request) -> RunStatus:
@@ -349,7 +559,7 @@ def _register_routes(application: FastAPI) -> None:
         status = coord.get_run(run_id)
         if status is None:
             raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
-        return status
+        return _with_live_worker_count(coord, status)
 
     @application.post("/api/runs/{run_id}/start", response_model=RunStatus, tags=["runs"])
     async def start_run(run_id: str, request: Request) -> RunStatus:
@@ -393,7 +603,8 @@ def _register_routes(application: FastAPI) -> None:
         tags=["runs"],
     )
     async def trigger_checkpoint(
-        run_id: str, request: Request,
+        run_id: str,
+        request: Request,
         step: int | None = Query(default=None),
     ) -> CheckpointInfo:
         coord = _get_coordinator(request)
@@ -414,7 +625,8 @@ def _register_routes(application: FastAPI) -> None:
                 health = await dp.health_check()
                 logger.info(
                     "Data plane health: healthy=%s queue_depth=%d",
-                    health.healthy, health.queue_depth,
+                    health.healthy,
+                    health.queue_depth,
                 )
             except Exception as exc:
                 logger.warning("Data plane health check failed: %s", exc)
@@ -508,7 +720,8 @@ def _register_routes(application: FastAPI) -> None:
                 last_checkpoint = committed[-1]
                 logger.info(
                     "Resuming from checkpoint %s (step %d)",
-                    last_checkpoint.checkpoint_id, last_checkpoint.step,
+                    last_checkpoint.checkpoint_id,
+                    last_checkpoint.step,
                 )
 
         try:
@@ -530,6 +743,9 @@ def _register_routes(application: FastAPI) -> None:
         except InvalidTransitionError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
 
+        if status.state == RunState.RUNNING:
+            with _WORKER_RESTART_STATE_LOCK:
+                _WORKER_RESTART_LAST_ATTEMPT.pop(run_id, None)
         _publish_event(request, run_id, "run_resumed", status.model_dump_json())
         return status
 
@@ -614,7 +830,10 @@ def _register_routes(application: FastAPI) -> None:
         tags=["checkpoints"],
     )
     async def upload_shard(
-        run_id: str, checkpoint_id: str, shard_id: str, request: Request,
+        run_id: str,
+        checkpoint_id: str,
+        shard_id: str,
+        request: Request,
     ) -> dict:
         """Receive shard bytes from SDK and stream them to the data plane via gRPC."""
         dp = _get_dp_client(request)
@@ -682,8 +901,7 @@ def _register_routes(application: FastAPI) -> None:
         # Track shard info for commit — use the same content-addressed key
         # format as the Rust data plane writer (writer.rs:content_addressed_key)
         storage_key = (
-            f"{run_id}/{checkpoint_id}/"
-            f"sha256-{result.sha256_checksum[:16]}-{shard_id}.bin"
+            f"{run_id}/{checkpoint_id}/sha256-{result.sha256_checksum[:16]}-{shard_id}.bin"
         )
         shard_info = GrpcShardInfo(
             shard_id=shard_id,
@@ -706,7 +924,10 @@ def _register_routes(application: FastAPI) -> None:
 
         logger.info(
             "Shard uploaded: shard_id=%s checkpoint=%s bytes=%d sha256=%s",
-            shard_id, checkpoint_id, result.total_bytes, result.sha256_checksum[:16],
+            shard_id,
+            checkpoint_id,
+            result.total_bytes,
+            result.sha256_checksum[:16],
         )
 
         return {
@@ -721,7 +942,10 @@ def _register_routes(application: FastAPI) -> None:
         tags=["checkpoints"],
     )
     async def download_shard(
-        run_id: str, checkpoint_id: str, shard_id: str, request: Request,
+        run_id: str,
+        checkpoint_id: str,
+        shard_id: str,
+        request: Request,
     ) -> Response:
         """Download shard bytes from the data plane back to the SDK."""
         dp = _get_dp_client(request)
@@ -763,12 +987,20 @@ def _register_routes(application: FastAPI) -> None:
         body = await request.json()
         run_id = body.get("run_id")
         hostname = body.get("hostname", "")
+        requested_rank = body.get("rank")
+        rank = int(requested_rank) if requested_rank is not None else None
 
         worker_mgr = _get_worker_mgr(request)
         if worker_mgr:
-            return worker_mgr.register_worker(run_id=run_id, hostname=hostname)
+            return worker_mgr.register_worker(
+                run_id=run_id,
+                hostname=hostname,
+                rank=rank,
+            )
         return _get_coordinator(request).register_worker(
-            run_id=run_id or "__unassigned__", rank=0, hostname=hostname,
+            run_id=run_id or "__unassigned__",
+            rank=rank or 0,
+            hostname=hostname,
         )
 
     @application.post("/api/workers/{worker_id}/heartbeat", tags=["workers"])
@@ -778,6 +1010,17 @@ def _register_routes(application: FastAPI) -> None:
 
         worker_mgr = _get_worker_mgr(request)
         if worker_mgr:
+            known_worker = worker_mgr.get_worker(worker_id)
+            if known_worker is not None and known_worker.status in {
+                "SUPERSEDED",
+                "DEREGISTERED",
+            }:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Worker {worker_id!r} is no longer active (status={known_worker.status})"
+                    ),
+                )
             worker = worker_mgr.update_worker_heartbeat(worker_id, step=step)
             if worker is None:
                 raise HTTPException(status_code=404, detail=f"Worker {worker_id!r} not found")
@@ -935,13 +1178,15 @@ def _register_routes(application: FastAPI) -> None:
         if _CHECKPOINT_DURATIONS:
             total = sum(_CHECKPOINT_DURATIONS)
             count = len(_CHECKPOINT_DURATIONS)
-            lines.extend([
-                "# HELP controlplane_checkpoint_duration_seconds Checkpoint commit duration",
-                "# TYPE controlplane_checkpoint_duration_seconds summary",
-                f"controlplane_checkpoint_duration_seconds_sum {total:.4f}",
-                f"controlplane_checkpoint_duration_seconds_count {count}",
-                "",
-            ])
+            lines.extend(
+                [
+                    "# HELP controlplane_checkpoint_duration_seconds Checkpoint commit duration",
+                    "# TYPE controlplane_checkpoint_duration_seconds summary",
+                    f"controlplane_checkpoint_duration_seconds_sum {total:.4f}",
+                    f"controlplane_checkpoint_duration_seconds_count {count}",
+                    "",
+                ]
+            )
 
         # Worker heartbeat lags
         hb_mgr = _get_heartbeat_mgr(request)
@@ -957,11 +1202,13 @@ def _register_routes(application: FastAPI) -> None:
 
         # Uptime
         uptime = time.monotonic() - _APP_START_TIME
-        lines.extend([
-            "# HELP controlplane_uptime_seconds Control plane uptime",
-            "# TYPE controlplane_uptime_seconds gauge",
-            f"controlplane_uptime_seconds {uptime:.2f}",
-        ])
+        lines.extend(
+            [
+                "# HELP controlplane_uptime_seconds Control plane uptime",
+                "# TYPE controlplane_uptime_seconds gauge",
+                f"controlplane_uptime_seconds {uptime:.2f}",
+            ]
+        )
 
         return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
 
@@ -974,11 +1221,13 @@ def _register_routes(application: FastAPI) -> None:
         latency_data = []
         for i, duration in enumerate(_CHECKPOINT_DURATIONS[-30:]):
             restore = _RESTORE_DURATIONS[i] if i < len(_RESTORE_DURATIONS) else 0.0
-            latency_data.append({
-                "index": i,
-                "save": round(duration, 3),
-                "restore": round(restore, 3),
-            })
+            latency_data.append(
+                {
+                    "index": i,
+                    "save": round(duration, 3),
+                    "restore": round(restore, 3),
+                }
+            )
 
         # Get summary metrics for throughput
         runs = coord.list_runs()
@@ -1040,6 +1289,7 @@ def _register_routes(application: FastAPI) -> None:
         disk_info = "N/A"
         try:
             import shutil
+
             usage = shutil.disk_usage("/")
             disk_info = f"{usage.used / 1024**3:.1f} GB / {usage.total / 1024**3:.1f} GB"
         except Exception:
@@ -1075,22 +1325,33 @@ def _register_routes(application: FastAPI) -> None:
 
         try:
             result = subprocess.run(
-                ["docker", "ps", "-a", "--format", "{{json .}}",
-                 "--filter", "label=com.docker.compose.project"],
-                capture_output=True, text=True, timeout=5,
+                [
+                    "docker",
+                    "ps",
+                    "-a",
+                    "--format",
+                    "{{json .}}",
+                    "--filter",
+                    "label=com.docker.compose.project",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             containers = []
             for line in result.stdout.strip().splitlines():
                 if not line:
                     continue
                 c = _json.loads(line)
-                containers.append({
-                    "name": c.get("Names", ""),
-                    "image": c.get("Image", ""),
-                    "status": c.get("Status", ""),
-                    "state": c.get("State", ""),
-                    "ports": c.get("Ports", ""),
-                })
+                containers.append(
+                    {
+                        "name": c.get("Names", ""),
+                        "image": c.get("Image", ""),
+                        "status": c.get("Status", ""),
+                        "state": c.get("State", ""),
+                        "ports": c.get("Ports", ""),
+                    }
+                )
             return containers
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return []
@@ -1103,10 +1364,16 @@ def _register_routes(application: FastAPI) -> None:
         """Stream live Docker container logs as Server-Sent Events."""
 
         container_list = [
-            c.strip() for c in containers.split(",")
-            if c.strip() in {
-                "ckpt-worker-0", "ckpt-worker-1", "ckpt-controlplane",
-                "ckpt-dataplane", "ckpt-etcd", "ckpt-minio",
+            c.strip()
+            for c in containers.split(",")
+            if c.strip()
+            in {
+                "ckpt-worker-0",
+                "ckpt-worker-1",
+                "ckpt-controlplane",
+                "ckpt-dataplane",
+                "ckpt-etcd",
+                "ckpt-minio",
             }
         ]
         if not container_list:
@@ -1120,8 +1387,13 @@ def _register_routes(application: FastAPI) -> None:
             try:
                 for cname in container_list:
                     proc = await asyncio.create_subprocess_exec(
-                        "docker", "logs", "--tail", str(tail), "--follow",
-                        "--timestamps", cname,
+                        "docker",
+                        "logs",
+                        "--tail",
+                        str(tail),
+                        "--follow",
+                        "--timestamps",
+                        cname,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.STDOUT,
                     )
@@ -1158,15 +1430,20 @@ def _register_routes(application: FastAPI) -> None:
 
             finally:
                 import contextlib
+
                 for _, proc in processes:
                     with contextlib.suppress(ProcessLookupError):
                         proc.kill()
 
-        return StreamingResponse(stream(), media_type="text/event-stream", headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        })
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @application.get("/api/demo/storage", tags=["demo"])
     async def demo_storage() -> dict:
@@ -1177,10 +1454,12 @@ def _register_routes(application: FastAPI) -> None:
         s3_endpoint = os.environ.get("S3_ENDPOINT", "http://minio:9000")
         s3_bucket = os.environ.get("S3_BUCKET", "checkpoints")
         s3_access = os.environ.get(
-            "S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+            "S3_ACCESS_KEY",
+            os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
         )
         s3_secret = os.environ.get(
-            "S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+            "S3_SECRET_KEY",
+            os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
         )
 
         try:
@@ -1194,18 +1473,33 @@ def _register_routes(application: FastAPI) -> None:
             )
             resp = s3.list_objects_v2(Bucket=s3_bucket, MaxKeys=500)
             files = []
-            total_bytes = 0
+            listed_bytes = 0
             for obj in resp.get("Contents", []):
-                files.append({
-                    "key": obj["Key"],
-                    "size": obj["Size"],
-                    "modified": obj["LastModified"].isoformat(),
-                })
-                total_bytes += obj["Size"]
-            return {"files": files, "total_bytes": total_bytes}
+                files.append(
+                    {
+                        "key": obj["Key"],
+                        "size": obj["Size"],
+                        "modified": obj["LastModified"].isoformat(),
+                    }
+                )
+                listed_bytes += obj["Size"]
+            return {
+                "files": files,
+                # Keep total_bytes for compatibility with older frontends; it
+                # is explicitly the listed subtotal when S3 truncated results.
+                "total_bytes": listed_bytes,
+                "listed_bytes": listed_bytes,
+                "is_truncated": bool(resp.get("IsTruncated", False)),
+            }
         except Exception as exc:
             logger.warning("Failed to list MinIO storage: %s", exc)
-            return {"files": [], "total_bytes": 0, "error": str(exc)}
+            return {
+                "files": [],
+                "total_bytes": 0,
+                "listed_bytes": 0,
+                "is_truncated": False,
+                "error": str(exc),
+            }
 
     @application.get("/api/demo/storage/manifest", tags=["demo"])
     async def demo_storage_manifest(key: str = Query(...)) -> dict:
@@ -1221,10 +1515,12 @@ def _register_routes(application: FastAPI) -> None:
         s3_endpoint = os.environ.get("S3_ENDPOINT", "http://minio:9000")
         s3_bucket = os.environ.get("S3_BUCKET", "checkpoints")
         s3_access = os.environ.get(
-            "S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+            "S3_ACCESS_KEY",
+            os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
         )
         s3_secret = os.environ.get(
-            "S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+            "S3_SECRET_KEY",
+            os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
         )
 
         try:
@@ -1266,7 +1562,9 @@ def _register_routes(application: FastAPI) -> None:
         try:
             kill_result = subprocess.run(
                 ["docker", "kill", container_name],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if kill_result.returncode != 0:
                 return {
@@ -1279,18 +1577,37 @@ def _register_routes(application: FastAPI) -> None:
             other = "ckpt-worker-1" if container_name == "ckpt-worker-0" else "ckpt-worker-0"
             subprocess.run(
                 ["docker", "kill", other],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
 
             # Immediately transition the active run to FAILED
             coord = _get_coordinator(request)
             runs = coord.list_runs()
+            supervised_run_id = _get_supervised_run_id()
             active = [
-                r for r in runs
-                if r.state in (RunState.RUNNING, RunState.CHECKPOINTING, RunState.COMMITTED)
+                r
+                for r in runs
+                if r.state
+                in (
+                    RunState.RUNNING,
+                    RunState.CHECKPOINTING,
+                    RunState.COMMITTED,
+                    RunState.RECOVERING,
+                )
+                and (
+                    r.run_id == supervised_run_id
+                    or (
+                        supervised_run_id is None
+                        and any(
+                            worker.status == "ACTIVE" for worker in coord.list_workers(r.run_id)
+                        )
+                    )
+                )
             ]
             if active:
-                demo_run_id = active[0].run_id
+                demo_run_id = max(active, key=lambda run: run.updated_at).run_id
                 try:
                     coord.set_run_error(demo_run_id, f"Worker {container_name} killed (demo)")
                     logger.info("Kill endpoint: run %s transitioned to FAILED", demo_run_id)
@@ -1305,6 +1622,7 @@ def _register_routes(application: FastAPI) -> None:
                         if w and w.run_id == demo_run_id and w.status == "ACTIVE":
                             w.status = "DEAD"
                             import contextlib
+
                             with contextlib.suppress(Exception):
                                 coord.mark_worker_dead(demo_run_id, wid)
                     logger.info("Marked old workers DEAD for run %s", demo_run_id)
@@ -1319,8 +1637,10 @@ def _register_routes(application: FastAPI) -> None:
 
             # Record kill in activity feed with visitor's country
             forwarded = request.headers.get("x-forwarded-for", "")
-            client_ip = forwarded.split(",")[0].strip() if forwarded else (
-                request.client.host if request.client else "0.0.0.0"
+            client_ip = (
+                forwarded.split(",")[0].strip()
+                if forwarded
+                else (request.client.host if request.client else "0.0.0.0")
             )
             geo = await _lookup_country(client_ip)
             worker_label = container_name.replace("ckpt-", "")
@@ -1337,11 +1657,15 @@ def _register_routes(application: FastAPI) -> None:
                 await asyncio.sleep(5)
                 subprocess.run(
                     ["docker", "start", container_name],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 subprocess.run(
                     ["docker", "start", other],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 logger.info("Safety-net restarted %s and %s after kill", container_name, other)
 
@@ -1367,8 +1691,10 @@ def _register_routes(application: FastAPI) -> None:
         """Register/update a visitor and return live stats."""
         # Get client IP
         forwarded = request.headers.get("x-forwarded-for", "")
-        client_ip = forwarded.split(",")[0].strip() if forwarded else (
-            request.client.host if request.client else "0.0.0.0"
+        client_ip = (
+            forwarded.split(",")[0].strip()
+            if forwarded
+            else (request.client.host if request.client else "0.0.0.0")
         )
 
         # Get or create session ID from request body
@@ -1380,6 +1706,7 @@ def _register_routes(application: FastAPI) -> None:
 
         if not session_id:
             import uuid
+
             session_id = str(uuid.uuid4())
 
         # Look up country
@@ -1433,7 +1760,6 @@ def _register_routes(application: FastAPI) -> None:
             "total_visitors": len(_VISITORS),
             "activity": _ACTIVITY_FEED[:20],
         }
-
 
 
 # ---------------------------------------------------------------------------

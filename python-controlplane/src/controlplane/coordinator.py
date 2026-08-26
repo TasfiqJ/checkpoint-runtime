@@ -79,11 +79,7 @@ class InMemoryKVStore:
         self._data.pop(key, None)
 
     def get_prefix(self, prefix: str) -> list[tuple[bytes, bytes]]:
-        return [
-            (k.encode(), v)
-            for k, v in self._data.items()
-            if k.startswith(prefix)
-        ]
+        return [(k.encode(), v) for k, v in self._data.items() if k.startswith(prefix)]
 
 
 # ---------------------------------------------------------------------------
@@ -454,19 +450,25 @@ class Coordinator:
             workers.append(WorkerInfo.model_validate_json(value))
         return workers
 
-    def mark_worker_dead(self, run_id: str, worker_id: str) -> WorkerInfo:
+    def mark_worker_dead(
+        self,
+        run_id: str,
+        worker_id: str,
+        *,
+        status: str = "DEAD",
+    ) -> WorkerInfo:
         raw = self._kv.get(_worker_key(run_id, worker_id))
         if raw is None:
             raise KeyError(f"Worker {worker_id!r} not found for run {run_id!r}")
 
         worker = WorkerInfo.model_validate_json(raw)
-        worker.status = "DEAD"
+        worker.status = status
 
         self._kv.put(
             _worker_key(run_id, worker_id),
             worker.model_dump_json().encode(),
         )
-        logger.warning("Worker %s marked DEAD for run %s", worker_id, run_id)
+        logger.warning("Worker %s marked %s for run %s", worker_id, status, run_id)
         return worker
 
     # -- internal helpers ---------------------------------------------------

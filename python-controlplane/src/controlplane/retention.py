@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 class RetentionConfig:
     enabled: bool = True
     keep_committed_per_run: int = 30
+    keep_runs: int = 5
     orphan_grace_seconds: int = 3600
     interval_seconds: int = 3600
     endpoint: str = "http://minio:9000"
@@ -40,21 +41,30 @@ class RetentionConfig:
         return cls(
             enabled=enabled not in {"0", "false", "no", "off"},
             keep_committed_per_run=max(
-                1, int(os.environ.get("CHECKPOINT_RETENTION_COUNT", "30")),
+                1,
+                int(os.environ.get("CHECKPOINT_RETENTION_COUNT", "30")),
+            ),
+            keep_runs=max(
+                1,
+                int(os.environ.get("CHECKPOINT_RETENTION_RUNS", "5")),
             ),
             orphan_grace_seconds=max(
-                0, int(os.environ.get("CHECKPOINT_ORPHAN_GRACE_SECONDS", "3600")),
+                0,
+                int(os.environ.get("CHECKPOINT_ORPHAN_GRACE_SECONDS", "3600")),
             ),
             interval_seconds=max(
-                60, int(os.environ.get("CHECKPOINT_RETENTION_INTERVAL_SECONDS", "3600")),
+                60,
+                int(os.environ.get("CHECKPOINT_RETENTION_INTERVAL_SECONDS", "3600")),
             ),
             endpoint=os.environ.get("S3_ENDPOINT", "http://minio:9000"),
             bucket=os.environ.get("S3_BUCKET", "checkpoints"),
             access_key=os.environ.get(
-                "S3_ACCESS_KEY", os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+                "S3_ACCESS_KEY",
+                os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
             ),
             secret_key=os.environ.get(
-                "S3_SECRET_KEY", os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+                "S3_SECRET_KEY",
+                os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
             ),
             region=os.environ.get("S3_REGION", "us-east-1"),
         )
@@ -142,12 +152,58 @@ class CheckpointRetentionManager:
         for (run_id, checkpoint_id), checkpoint_objects in grouped.items():
             by_run[run_id].append((checkpoint_id, checkpoint_objects))
 
+        # Keeping N checkpoints *for every historical run* still grows without
+        # bound on an always-on demo. Keep active runs plus the most recently
+        # written run prefixes, then remove every object for older runs.
+        active_states = {"RUNNING", "CHECKPOINTING", "COMMITTED", "RECOVERING"}
+        run_records = self._coordinator.list_runs()
+        active_run_ids = {
+            run.run_id
+            for run in run_records
+            if getattr(run.state, "value", run.state) in active_states
+        }
+        # FAILED is resumable and may be the durable state left by a crash
+        # immediately before recovery orchestration. Preserve the newest one
+        # without allowing all historical failures to grow forever.
+        failed_runs = [
+            run for run in run_records if getattr(run.state, "value", run.state) == "FAILED"
+        ]
+        newest_failed_at = max(
+            (run.updated_at for run in failed_runs),
+            default=None,
+        )
+        # Preserve every exact tie for newest. Coarse clock resolution can
+        # produce identical persisted transition times, and guessing which
+        # tied run is recoverable risks deleting its only checkpoint.
+        recoverable_failed_run_ids = {
+            run.run_id for run in failed_runs if run.updated_at == newest_failed_at
+        }
+        run_recency = sorted(
+            by_run,
+            key=lambda run_id: max(
+                obj["LastModified"]
+                for _, checkpoint_objects in by_run[run_id]
+                for obj in checkpoint_objects
+            ),
+            reverse=True,
+        )
+        retained_run_ids = (
+            active_run_ids | recoverable_failed_run_ids | set(run_recency[: self._config.keep_runs])
+        )
+
         cutoff = (now or datetime.now(UTC)) - timedelta(
             seconds=self._config.orphan_grace_seconds,
         )
         to_delete: list[tuple[str, str, list[dict[str, Any]]]] = []
 
         for run_id, checkpoints in by_run.items():
+            if run_id not in retained_run_ids:
+                to_delete.extend(
+                    (run_id, checkpoint_id, checkpoint_objects)
+                    for checkpoint_id, checkpoint_objects in checkpoints
+                )
+                continue
+
             committed = []
             orphans = []
             for checkpoint_id, checkpoint_objects in checkpoints:
@@ -162,7 +218,7 @@ class CheckpointRetentionManager:
                 reverse=True,
             )
             for checkpoint_id, checkpoint_objects in committed[
-                self._config.keep_committed_per_run:
+                self._config.keep_committed_per_run :
             ]:
                 to_delete.append((run_id, checkpoint_id, checkpoint_objects))
 

@@ -12,6 +12,8 @@ interface StorageFile {
 interface StorageData {
   files: StorageFile[];
   total_bytes: number;
+  listed_bytes?: number;
+  is_truncated?: boolean;
 }
 
 function buildTree(files: StorageFile[]): Map<string, Map<string, StorageFile[]>> {
@@ -60,7 +62,10 @@ export default function StorageBrowser({ active }: { active: boolean }) {
         <h4 className="panel-title">Object Storage</h4>
         {data && (
           <span className="ml-auto text-xs text-txt-3">
-            {files.length} files &middot; {formatBytes(data.total_bytes)}
+            {data.is_truncated ? `First ${files.length}` : files.length} files
+            {' '}&middot;{' '}
+            {formatBytes(data.listed_bytes ?? data.total_bytes)}
+            {data.is_truncated ? ' listed' : ''}
           </span>
         )}
       </div>

@@ -131,8 +131,8 @@ class WorkerLease:
 # ---------------------------------------------------------------------------
 
 FailureCallback = (
-    Callable[[str, str], None]            # sync: (worker_id, run_id) -> None
-    | Callable[[str, str], Any]           # async: (worker_id, run_id) -> Coroutine
+    Callable[[str, str], None]  # sync: (worker_id, run_id) -> None
+    | Callable[[str, str], Any]  # async: (worker_id, run_id) -> Coroutine
 )
 
 
@@ -188,7 +188,11 @@ class HeartbeatManager:
 
     def unregister(self, worker_id: str) -> None:
         """Remove the lease for a worker."""
-        self._leases.pop(worker_id, None)
+        lease = self._leases.pop(worker_id, None)
+        if lease is not None:
+            # Monitoring iterates over a snapshot. Mark the removed object dead
+            # so the same scan cannot fire a stale second recovery callback.
+            lease.is_alive = False
         logger.debug("Unregistered heartbeat lease for worker %s", worker_id)
 
     # Alias for test compatibility
@@ -250,7 +254,9 @@ class HeartbeatManager:
                     await result
             except Exception:
                 logger.exception(
-                    "Error in failure callback for worker %s (run %s)", worker_id, run_id,
+                    "Error in failure callback for worker %s (run %s)",
+                    worker_id,
+                    run_id,
                 )
 
     def _fire_failure(self, run_id: str, worker_id: str) -> None:
@@ -266,7 +272,9 @@ class HeartbeatManager:
                     )
             except Exception:
                 logger.exception(
-                    "Error in failure callback for worker %s (run %s)", worker_id, run_id,
+                    "Error in failure callback for worker %s (run %s)",
+                    worker_id,
+                    run_id,
                 )
 
     # -- monitoring loop ----------------------------------------------------
@@ -314,7 +322,9 @@ class HeartbeatManager:
                 lease.is_alive = False
                 logger.warning(
                     "Worker %s (run %s) declared DEAD (%.1fs since last heartbeat)",
-                    worker_id, lease.run_id, elapsed,
+                    worker_id,
+                    lease.run_id,
+                    elapsed,
                 )
 
                 # Mark dead in coordinator
@@ -323,7 +333,8 @@ class HeartbeatManager:
                         self._coordinator.mark_worker_dead(lease.run_id, worker_id)
                     except Exception:
                         logger.exception(
-                            "Failed to mark worker %s dead in coordinator", worker_id,
+                            "Failed to mark worker %s dead in coordinator",
+                            worker_id,
                         )
 
                 # Fire failure callbacks
@@ -332,7 +343,9 @@ class HeartbeatManager:
             elif elapsed > self.config.timeout_seconds:
                 logger.info(
                     "Worker %s (run %s) is unresponsive (%.1fs since last heartbeat)",
-                    worker_id, lease.run_id, elapsed,
+                    worker_id,
+                    lease.run_id,
+                    elapsed,
                 )
 
     def _check_leases(self) -> None:
@@ -347,7 +360,9 @@ class HeartbeatManager:
                 lease.is_alive = False
                 logger.warning(
                     "Worker %s (run %s) declared DEAD (%.1fs since last heartbeat)",
-                    worker_id, lease.run_id, elapsed,
+                    worker_id,
+                    lease.run_id,
+                    elapsed,
                 )
 
                 if self._coordinator is not None:
@@ -355,7 +370,8 @@ class HeartbeatManager:
                         self._coordinator.mark_worker_dead(lease.run_id, worker_id)
                     except Exception:
                         logger.exception(
-                            "Failed to mark worker %s dead in coordinator", worker_id,
+                            "Failed to mark worker %s dead in coordinator",
+                            worker_id,
                         )
 
                 self._fire_failure(lease.run_id, worker_id)
@@ -363,5 +379,7 @@ class HeartbeatManager:
             elif elapsed > self.config.timeout_seconds:
                 logger.info(
                     "Worker %s (run %s) is unresponsive (%.1fs since last heartbeat)",
-                    worker_id, lease.run_id, elapsed,
+                    worker_id,
+                    lease.run_id,
+                    elapsed,
                 )

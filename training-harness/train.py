@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 import logging
 import os
 import signal
@@ -36,6 +35,7 @@ import sys
 import threading
 import time
 import uuid
+from datetime import timedelta
 from pathlib import Path
 
 import torch
@@ -45,6 +45,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, TensorDataset
 
 from model import build_model, count_parameters
+
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -94,6 +95,23 @@ signal.signal(signal.SIGTERM, _signal_handler)
 
 # Shared volume path for run_id coordination between workers
 _SHARED_RUN_ID_PATH = Path("/shared/run_id")
+_RESUMABLE_RUN_STATES = frozenset(
+    {
+        "RUNNING",
+        "COMMITTED",
+        "CHECKPOINTING",
+        "FAILED",
+        "RECOVERING",
+    }
+)
+
+
+def _publish_shared_run_id(run_id: str) -> None:
+    """Atomically publish a run ID for the nonzero ranks."""
+    _SHARED_RUN_ID_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = _SHARED_RUN_ID_PATH.with_suffix(".tmp")
+    temporary_path.write_text(run_id)
+    os.replace(temporary_path, _SHARED_RUN_ID_PATH)
 
 
 # ---------------------------------------------------------------------------
@@ -109,14 +127,19 @@ def _get_runtime_client():
         return None
 
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python-controlplane" / "src"))
+        sys.path.insert(
+            0,
+            str(Path(__file__).resolve().parent.parent / "python-controlplane" / "src"),
+        )
         from sdk.client import RuntimeClient
+
         client = RuntimeClient(base_url=control_plane_url, timeout=120.0)
         logger.info("Connected to control plane at %s", control_plane_url)
         return client
     except Exception as exc:
-        logger.warning("Could not connect to control plane: %s — falling back to local mode", exc)
-        return None
+        raise RuntimeError(
+            f"Could not initialize runtime client for {control_plane_url}"
+        ) from exc
 
 
 def _get_or_create_run_id(runtime_client, rank: int, world_size: int) -> str:
@@ -138,16 +161,22 @@ def _get_or_create_run_id(runtime_client, rank: int, world_size: int) -> str:
                 try:
                     run_info = runtime_client.get_run_status(old_run_id)
                     state = run_info.get("state", "")
-                    if state in ("RUNNING", "COMMITTED", "CHECKPOINTING", "FAILED", "RECOVERING"):
-                        # Resume the existing run — try to move it back to RUNNING
-                        try:
+                    if state in _RESUMABLE_RUN_STATES:
+                        # FAILED must first become RECOVERING. An already
+                        # RECOVERING run stays there until its checkpoint has
+                        # actually been restored below.
+                        if state in {"FAILED", "COMMITTED", "CHECKPOINTING"}:
                             runtime_client.resume(old_run_id)
-                        except Exception:
-                            pass  # already RUNNING or acceptable
-                        logger.info("Resuming existing run: %s (was %s)", old_run_id, state)
+                        logger.info(
+                            "Resuming existing run: %s (was %s)", old_run_id, state
+                        )
                         return old_run_id
-                except Exception:
-                    pass  # run not found — create a new one
+                except Exception as exc:
+                    if getattr(exc, "status_code", None) != 404:
+                        raise RuntimeError(
+                            f"Could not verify shared run {old_run_id}"
+                        ) from exc
+                    # A confirmed 404 means the stale ID can be replaced.
 
         # No resumable run found — create a new one
         run_info = runtime_client.start_run(
@@ -158,8 +187,7 @@ def _get_or_create_run_id(runtime_client, rank: int, world_size: int) -> str:
         logger.info("Created new run: %s", run_id)
 
         # Write run_id to shared volume for other workers
-        _SHARED_RUN_ID_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _SHARED_RUN_ID_PATH.write_text(run_id)
+        _publish_shared_run_id(run_id)
         return run_id
     else:
         # Other ranks wait for rank-0 to write a *valid* run_id
@@ -168,14 +196,32 @@ def _get_or_create_run_id(runtime_client, rank: int, world_size: int) -> str:
             if _SHARED_RUN_ID_PATH.exists():
                 run_id = _SHARED_RUN_ID_PATH.read_text().strip()
                 if run_id and run_id != last_seen:
-                    last_seen = run_id
                     # Verify this run actually exists on the control plane
                     try:
-                        runtime_client.get_run_status(run_id)
-                        logger.info("Got run_id from rank-0: %s", run_id)
-                        return run_id
-                    except Exception:
-                        pass  # stale id — keep waiting for rank-0 to update
+                        run_info = runtime_client.get_run_status(run_id)
+                        state = run_info.get("state", "")
+                        if state in _RESUMABLE_RUN_STATES:
+                            logger.info(
+                                "Got run_id from rank-0: %s (state=%s)",
+                                run_id,
+                                state,
+                            )
+                            return run_id
+                        last_seen = run_id
+                        logger.info(
+                            "Ignoring stale shared run_id %s (state=%s)",
+                            run_id,
+                            state,
+                        )
+                    except Exception as exc:
+                        if getattr(exc, "status_code", None) == 404:
+                            last_seen = run_id
+                        else:
+                            logger.warning(
+                                "Could not validate shared run_id %s: %s",
+                                run_id,
+                                exc,
+                            )
             time.sleep(1)
         raise RuntimeError("Timed out waiting for run_id from rank-0")
 
@@ -186,9 +232,21 @@ def _get_or_create_run_id(runtime_client, rank: int, world_size: int) -> str:
 class HeartbeatThread:
     """Background thread that sends periodic heartbeats to the control plane."""
 
-    def __init__(self, runtime_client, worker_id: str, interval: float = 5.0):
+    def __init__(
+        self,
+        runtime_client,
+        worker_id: str,
+        *,
+        run_id: str,
+        hostname: str,
+        rank: int,
+        interval: float = 5.0,
+    ):
         self._client = runtime_client
         self._worker_id = worker_id
+        self._run_id = run_id
+        self._hostname = hostname
+        self._rank = rank
         self._interval = interval
         self._step = 0
         self._stop = threading.Event()
@@ -206,11 +264,33 @@ class HeartbeatThread:
 
     def _run(self):
         while not self._stop.is_set():
-            try:
-                self._client.heartbeat(self._worker_id, step=self._step)
-            except Exception as exc:
-                logger.warning("Heartbeat failed: %s", exc)
+            self._send_heartbeat()
             self._stop.wait(self._interval)
+
+    def _send_heartbeat(self) -> None:
+        """Send one heartbeat, re-registering after lost control-plane state."""
+        try:
+            self._client.heartbeat(self._worker_id, step=self._step)
+        except Exception as exc:
+            if getattr(exc, "status_code", None) != 404:
+                logger.warning("Heartbeat failed: %s", exc)
+                return
+
+            try:
+                worker_info = self._client.register_worker(
+                    run_id=self._run_id,
+                    hostname=self._hostname,
+                    rank=self._rank,
+                )
+                old_worker_id = self._worker_id
+                self._worker_id = worker_info["worker_id"]
+                logger.info(
+                    "Control plane forgot worker %s; re-registered as %s",
+                    old_worker_id,
+                    self._worker_id,
+                )
+            except Exception as register_exc:
+                logger.warning("Heartbeat re-registration failed: %s", register_exc)
 
 
 # ---------------------------------------------------------------------------
@@ -231,12 +311,16 @@ def save_checkpoint_local(
     state = {
         "step": step,
         "loss": loss,
-        "model_state_dict": model.module.state_dict() if isinstance(model, DDP) else model.state_dict(),
+        "model_state_dict": model.module.state_dict()
+        if isinstance(model, DDP)
+        else model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
     }
 
     torch.save(state, ckpt_path)
-    logger.info("Checkpoint saved (local): %s (step=%d, loss=%.4f)", ckpt_path.name, step, loss)
+    logger.info(
+        "Checkpoint saved (local): %s (step=%d, loss=%.4f)", ckpt_path.name, step, loss
+    )
     return ckpt_path
 
 
@@ -248,10 +332,15 @@ def load_checkpoint_local(
 ) -> int:
     """Load the latest checkpoint from local disk. Returns the step to resume from."""
     import re
+
     pattern = f"checkpoint_step*_rank{rank}.pt"
     checkpoints = sorted(
         checkpoint_dir.glob(pattern),
-        key=lambda p: int(re.search(r"step(\d+)", p.name).group(1)) if re.search(r"step(\d+)", p.name) else 0,
+        key=lambda p: (
+            int(re.search(r"step(\d+)", p.name).group(1))
+            if re.search(r"step(\d+)", p.name)
+            else 0
+        ),
     )
     if not checkpoints:
         logger.info("No local checkpoints found in %s", checkpoint_dir)
@@ -281,7 +370,7 @@ def save_checkpoint_runtime(
     rank: int,
     runtime_client,
     run_id: str,
-) -> None:
+) -> bool:
     """Save a checkpoint through the runtime control plane.
 
     This actually sends the serialized tensor data to the data plane
@@ -290,7 +379,9 @@ def save_checkpoint_runtime(
     state = {
         "step": step,
         "loss": loss,
-        "model_state_dict": model.module.state_dict() if isinstance(model, DDP) else model.state_dict(),
+        "model_state_dict": model.module.state_dict()
+        if isinstance(model, DDP)
+        else model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
     }
 
@@ -321,20 +412,19 @@ def save_checkpoint_runtime(
 
         elapsed = time.time() - t0
         logger.info(
-            "Checkpoint saved (runtime): step=%d loss=%.4f size=%d bytes "
-            "sha256=%s time=%.2fs",
-            step, loss, len(shard_data),
+            "Checkpoint saved (runtime): step=%d loss=%.4f size=%d bytes sha256=%s time=%.2fs",
+            step,
+            loss,
+            len(shard_data),
             upload_result.get("sha256_checksum", "?")[:16],
             elapsed,
         )
+        return True
     except Exception as exc:
         logger.error("Runtime checkpoint failed: %s", exc)
-        # Attempt to resume the run to RUNNING so subsequent checkpoints can work
-        try:
-            runtime_client.resume(run_id)
-            logger.info("Resumed run to RUNNING after checkpoint failure")
-        except Exception:
-            pass  # Best-effort; state may already be acceptable
+        raise RuntimeError(
+            f"Checkpoint {step} failed; distributed workers must recover as a group"
+        ) from exc
 
 
 def load_checkpoint_runtime(
@@ -358,7 +448,7 @@ def load_checkpoint_runtime(
             logger.info("No committed checkpoints found for run %s", run_id)
             return 0
 
-        latest = committed[-1]
+        latest = max(committed, key=lambda checkpoint: int(checkpoint.get("step", 0)))
         checkpoint_id = latest.get("checkpoint_id", "")
         step = latest.get("step", 0)
 
@@ -394,14 +484,18 @@ def load_checkpoint_runtime(
 
         elapsed = time.time() - t0
         logger.info(
-            "Restored from runtime checkpoint: checkpoint_id=%s step=%d "
-            "size=%d bytes time=%.2fs",
-            checkpoint_id, step, len(shard_bytes), elapsed,
+            "Restored from runtime checkpoint: checkpoint_id=%s step=%d size=%d bytes time=%.2fs",
+            checkpoint_id,
+            step,
+            len(shard_bytes),
+            elapsed,
         )
         return step
     except Exception as exc:
-        logger.warning("Runtime resume failed: %s — starting from step 0", exc)
-        return 0
+        logger.error("Runtime checkpoint restore failed: %s", exc)
+        raise RuntimeError(
+            f"Refusing to start run {run_id} from step 0 after restore failure"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -444,7 +538,13 @@ def train(args: argparse.Namespace) -> None:
         os.environ.setdefault("RANK", str(rank))
         os.environ.setdefault("WORLD_SIZE", str(world_size))
         os.environ.setdefault("LOCAL_RANK", str(local_rank))
-        dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+        ddp_timeout = int(os.environ.get("DDP_TIMEOUT_SECONDS", "120"))
+        dist.init_process_group(
+            backend="gloo",
+            rank=rank,
+            world_size=world_size,
+            timeout=timedelta(seconds=ddp_timeout),
+        )
         logger.info("DDP initialized: rank=%d/%d", rank, world_size)
 
     # Build model
@@ -468,7 +568,9 @@ def train(args: argparse.Namespace) -> None:
         input_dim=args.input_dim,
         num_classes=args.output_dim,
     )
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    dataloader = DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=True, drop_last=True
+    )
 
     # Initialize runtime client (if available)
     runtime_client = _get_runtime_client()
@@ -479,9 +581,11 @@ def train(args: argparse.Namespace) -> None:
         try:
             run_id = _get_or_create_run_id(runtime_client, rank, world_size)
         except Exception as exc:
-            logger.warning("Failed to get/create run: %s — falling back to local mode", exc)
-            runtime_client = None
-            run_id = ""
+            logger.error(
+                "Failed to coordinate a runtime run: %s; refusing unsafe local fallback",
+                exc,
+            )
+            raise
     else:
         run_id = ""
 
@@ -495,15 +599,24 @@ def train(args: argparse.Namespace) -> None:
             worker_info = runtime_client.register_worker(
                 run_id=run_id,
                 hostname=socket.gethostname(),
+                rank=rank,
             )
             worker_id = worker_info["worker_id"]
             logger.info("Registered as worker %s", worker_id)
 
             # Start heartbeat thread
-            heartbeat = HeartbeatThread(runtime_client, worker_id, interval=5.0)
+            heartbeat = HeartbeatThread(
+                runtime_client,
+                worker_id,
+                run_id=run_id,
+                hostname=socket.gethostname(),
+                rank=rank,
+                interval=5.0,
+            )
             heartbeat.start()
         except Exception as exc:
-            logger.warning("Worker registration failed: %s", exc)
+            logger.error("Worker registration failed: %s", exc)
+            raise
     else:
         logger.info("Using local disk for checkpointing")
 
@@ -512,7 +625,9 @@ def train(args: argparse.Namespace) -> None:
     start_step = 0
     if args.resume or use_runtime:
         if use_runtime:
-            start_step = load_checkpoint_runtime(model, optimizer, rank, runtime_client, run_id)
+            start_step = load_checkpoint_runtime(
+                model, optimizer, rank, runtime_client, run_id
+            )
             # After checkpoint is restored, transition RECOVERING -> RUNNING.
             # The first resume() call (in _get_or_create_run_id) moved the run
             # from FAILED -> RECOVERING.  Now that the checkpoint is loaded we
@@ -520,27 +635,39 @@ def train(args: argparse.Namespace) -> None:
             #
             # Hold RECOVERING for a few seconds so the frontend (which polls
             # every 500ms–2s) has time to display it before we go to RUNNING.
-            if start_step > 0 and rank == 0:
-                logger.info(
-                    "Checkpoint restored (step=%d). Holding RECOVERING for 6s "
-                    "so the frontend can display the recovery state...",
-                    start_step,
-                )
-                time.sleep(6)
+            if rank == 0:
+                if start_step > 0:
+                    logger.info(
+                        "Checkpoint restored (step=%d). Holding RECOVERING for 6s "
+                        "so the frontend can display the recovery state...",
+                        start_step,
+                    )
+                    time.sleep(6)
                 try:
                     runtime_client.resume(run_id)
-                    logger.info(
-                        "Resumed run %s after checkpoint restore (step=%d)",
-                        run_id, start_step,
-                    )
+                    if start_step > 0:
+                        logger.info(
+                            "Resumed run %s after checkpoint restore (step=%d)",
+                            run_id,
+                            start_step,
+                        )
+                    else:
+                        logger.info(
+                            "Resumed run %s after confirming no committed checkpoint",
+                            run_id,
+                        )
                 except Exception as exc:
-                    logger.warning("Could not resume run after restore: %s", exc)
+                    logger.error("Could not resume run after restore: %s", exc)
+                    raise RuntimeError(
+                        f"Run {run_id} could not leave RECOVERING after restore"
+                    ) from exc
         else:
             start_step = load_checkpoint_local(model, optimizer, checkpoint_dir, rank)
 
     # Training loop
     model.train()
     step = start_step
+    last_successful_checkpoint_step = start_step if start_step > 0 else None
     running_loss = 0.0
     t_start = time.time()
 
@@ -568,7 +695,10 @@ def train(args: argparse.Namespace) -> None:
                 steps_per_sec = (step - start_step) / elapsed if elapsed > 0 else 0
                 logger.info(
                     "step=%d/%d  loss=%.4f  steps/s=%.1f",
-                    step, args.steps, avg_loss, steps_per_sec,
+                    step,
+                    args.steps,
+                    avg_loss,
+                    steps_per_sec,
                 )
                 running_loss = 0.0
 
@@ -577,35 +707,71 @@ def train(args: argparse.Namespace) -> None:
                 try:
                     if rank == 0 or not is_distributed:
                         if use_runtime:
-                            save_checkpoint_runtime(
-                                model, optimizer, step, loss.item(), rank,
-                                runtime_client, run_id,
+                            checkpoint_saved = save_checkpoint_runtime(
+                                model,
+                                optimizer,
+                                step,
+                                loss.item(),
+                                rank,
+                                runtime_client,
+                                run_id,
                             )
                         else:
-                            save_checkpoint_local(model, optimizer, step, loss.item(), checkpoint_dir, rank)
+                            save_checkpoint_local(
+                                model,
+                                optimizer,
+                                step,
+                                loss.item(),
+                                checkpoint_dir,
+                                rank,
+                            )
+                            checkpoint_saved = True
+                        if checkpoint_saved:
+                            last_successful_checkpoint_step = step
                 except Exception as exc:
-                    logger.error("Checkpoint save failed (continuing training): %s", exc)
+                    logger.error("Checkpoint save failed: %s", exc)
+                    if use_runtime:
+                        raise
                 finally:
                     if is_distributed:
                         dist.barrier()
 
-    # Final checkpoint
-    if rank == 0 or not is_distributed:
+    # Retry the final step unless that exact checkpoint was saved successfully.
+    needs_final_checkpoint = last_successful_checkpoint_step != step
+    final_checkpoint_saved = not needs_final_checkpoint
+    if needs_final_checkpoint and (rank == 0 or not is_distributed):
         if use_runtime:
-            save_checkpoint_runtime(model, optimizer, step, running_loss, rank, runtime_client, run_id)
+            final_checkpoint_saved = save_checkpoint_runtime(
+                model, optimizer, step, running_loss, rank, runtime_client, run_id
+            )
         else:
-            save_checkpoint_local(model, optimizer, step, running_loss, checkpoint_dir, rank)
+            save_checkpoint_local(
+                model, optimizer, step, running_loss, checkpoint_dir, rank
+            )
+            final_checkpoint_saved = True
 
     elapsed = time.time() - t_start
     logger.info("Training complete: %d steps in %.1fs", step, elapsed)
 
     # Mark run as completed
-    if use_runtime and rank == 0:
+    if use_runtime and rank == 0 and final_checkpoint_saved:
         try:
             runtime_client.complete_run(run_id)
             logger.info("Run %s marked as COMPLETED", run_id)
         except Exception as exc:
             logger.warning("Could not mark run as completed: %s", exc)
+    elif use_runtime and rank == 0:
+        logger.error(
+            "Run %s remains RUNNING because its final checkpoint failed", run_id
+        )
+
+    # Do not let a faster nonzero rank exit and restart into the next DDP
+    # generation while rank 0 is still finalizing this run.
+    if is_distributed:
+        try:
+            dist.barrier()
+        except Exception as exc:
+            logger.warning("Final DDP synchronization failed: %s", exc)
 
     # Cleanup
     if heartbeat:
@@ -626,7 +792,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log-every", type=int, default=50)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--model-type", type=str, default="mlp", choices=["mlp", "resnet"])
+    parser.add_argument(
+        "--model-type", type=str, default="mlp", choices=["mlp", "resnet"]
+    )
     parser.add_argument("--input-dim", type=int, default=784)
     parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument("--output-dim", type=int, default=10)

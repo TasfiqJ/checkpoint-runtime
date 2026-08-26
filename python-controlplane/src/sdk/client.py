@@ -139,11 +139,16 @@ class RuntimeClient:
         self,
         run_id: str | None = None,
         hostname: str = "",
+        rank: int | None = None,
     ) -> dict[str, Any]:
-        return self._post("/api/workers/register", json={
-            "run_id": run_id,
-            "hostname": hostname,
-        })
+        return self._post(
+            "/api/workers/register",
+            json={
+                "run_id": run_id,
+                "hostname": hostname,
+                "rank": rank,
+            },
+        )
 
     def heartbeat(self, worker_id: str, step: int = 0) -> dict[str, Any]:
         return self._post(f"/api/workers/{worker_id}/heartbeat", json={"step": step})

@@ -1,3 +1,9 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # ─── Infrastructure ─────────────────────────────────────────────
   etcd:
@@ -13,6 +19,7 @@ services:
       - "2379:2379"
       - "2380:2380"
     restart: always
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "etcdctl", "endpoint", "health"]
       interval: 10s
@@ -32,6 +39,7 @@ services:
     volumes:
       - minio-data:/data
     restart: always
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -58,6 +66,13 @@ services:
       - "50051:50051"
       - "9090:9090"
     restart: always
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       minio:
         condition: service_healthy
@@ -81,24 +96,34 @@ services:
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       CHECKPOINT_RETENTION_ENABLED: "true"
       CHECKPOINT_RETENTION_COUNT: ${CHECKPOINT_RETENTION_COUNT:-30}
+      CHECKPOINT_RETENTION_RUNS: ${CHECKPOINT_RETENTION_RUNS:-5}
       CHECKPOINT_ORPHAN_GRACE_SECONDS: ${CHECKPOINT_ORPHAN_GRACE_SECONDS:-3600}
       CHECKPOINT_RETENTION_INTERVAL_SECONDS: ${CHECKPOINT_RETENTION_INTERVAL_SECONDS:-3600}
+      AUTO_RESTART_WORKERS: "true"
+      WORKER_CONTAINERS: "ckpt-worker-0,ckpt-worker-1"
+      SHARED_RUN_ID_PATH: "/shared/run_id"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
     ports:
       - "8000:8000"
       - "50052:50052"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # for demo kill-worker endpoint
+      - run-shared:/shared:ro
     restart: always
+    logging: *default-logging
     healthcheck:
-      test: ["CMD", "curl", "-sf", "--max-time", "5", "http://localhost:8000/api/health"]
+      test:
+        - CMD-SHELL
+        - >-
+          curl -sf --max-time 5 http://localhost:8000/api/health |
+          grep -q '"status":"HEALTHY"'
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
     depends_on:
       rust-dataplane:
-        condition: service_started
+        condition: service_healthy
       etcd:
         condition: service_healthy
       minio:
@@ -113,6 +138,7 @@ services:
     ports:
       - "3000:80"
     restart: always
+    logging: *default-logging
     depends_on:
       - python-controlplane
 
@@ -128,16 +154,20 @@ services:
       WORKER_RANK: "0"
       LOCAL_RANK: "0"
       WORLD_SIZE: "2"
-      NUM_STEPS: "10000"
+      NUM_STEPS: "1000000"
       CHECKPOINT_INTERVAL: "50"
       MASTER_ADDR: "training-worker-0"
       MASTER_PORT: "29500"
+      DDP_TIMEOUT_SECONDS: "120"
     volumes:
       - run-shared:/shared
     restart: always
+    logging: *default-logging
     depends_on:
-      - python-controlplane
-      - rust-dataplane
+      python-controlplane:
+        condition: service_healthy
+      rust-dataplane:
+        condition: service_healthy
 
   training-worker-1:
     build:
@@ -150,16 +180,20 @@ services:
       WORKER_RANK: "1"
       LOCAL_RANK: "0"
       WORLD_SIZE: "2"
-      NUM_STEPS: "10000"
+      NUM_STEPS: "1000000"
       CHECKPOINT_INTERVAL: "50"
       MASTER_ADDR: "training-worker-0"
       MASTER_PORT: "29500"
+      DDP_TIMEOUT_SECONDS: "120"
     volumes:
       - run-shared:/shared
     restart: always
+    logging: *default-logging
     depends_on:
-      - python-controlplane
-      - rust-dataplane
+      python-controlplane:
+        condition: service_healthy
+      rust-dataplane:
+        condition: service_healthy
 
   # ─── Observability ─────────────────────────────────────────────
   otel-collector:
@@ -173,6 +207,7 @@ services:
       - "4318:4318"
       - "8889:8889"
     restart: always
+    logging: *default-logging
 
   prometheus:
     image: prom/prometheus:latest
@@ -183,6 +218,7 @@ services:
     ports:
       - "9091:9090"
     restart: always
+    logging: *default-logging
     depends_on:
       - otel-collector
 
@@ -205,6 +241,7 @@ services:
     ports:
       - "3001:3000"
     restart: always
+    logging: *default-logging
     depends_on:
       - prometheus
 
@@ -217,6 +254,7 @@ services:
       - "16686:16686"
       - "14268:14268"
     restart: always
+    logging: *default-logging
     depends_on:
       - otel-collector
 

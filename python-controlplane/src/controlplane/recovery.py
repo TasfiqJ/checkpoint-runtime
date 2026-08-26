@@ -6,8 +6,10 @@ protocol:
 
 1. Transition the affected run to FAILED.
 2. Abort any in-progress checkpoints.
-3. Transition through RECOVERING -> RUNNING to resume the run from the
-   last committed checkpoint.
+3. Move the run to RECOVERING and ask the configured worker supervisor to
+   restart the whole distributed worker group.
+4. Leave the run in RECOVERING until a restarted worker restores the last
+   committed checkpoint and explicitly resumes the run.
 
 The recovery logic respects the run state machine and handles edge cases
 such as runs already in a terminal state or concurrent failures.
@@ -16,6 +18,7 @@ such as runs already in a terminal state or concurrent failures.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from controlplane.coordinator import Coordinator
 from controlplane.heartbeat import HeartbeatManager
@@ -35,6 +38,9 @@ class RecoveryManager:
         auto_recover: If True (default), automatically attempt to recover
             runs when a worker failure is detected. If False, runs are moved
             to FAILED but not automatically restarted.
+        restart_worker_group: Callback that schedules a coordinated restart
+            for every worker in a run. The callback returns True when the
+            restart was scheduled. Without a callback the run remains FAILED.
     """
 
     def __init__(
@@ -43,10 +49,12 @@ class RecoveryManager:
         heartbeat_mgr: HeartbeatManager | None = None,
         *,
         auto_recover: bool = True,
+        restart_worker_group: Callable[[str], bool] | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._heartbeat_mgr = heartbeat_mgr
         self._auto_recover = auto_recover
+        self._restart_worker_group = restart_worker_group
 
         # Track runs currently being recovered to avoid re-entrant recovery
         self._recovering: set[str] = set()
@@ -70,7 +78,8 @@ class RecoveryManager:
         """
         logger.warning(
             "RecoveryManager notified: worker %s failed in run %s",
-            worker_id, run_id,
+            worker_id,
+            run_id,
         )
 
         # Avoid re-entrant recovery for the same run
@@ -86,7 +95,8 @@ class RecoveryManager:
         except Exception:
             logger.exception(
                 "Unhandled error during failure handling for run %s (worker %s)",
-                run_id, worker_id,
+                run_id,
+                worker_id,
             )
         finally:
             self._recovering.discard(run_id)
@@ -99,7 +109,8 @@ class RecoveryManager:
         Steps:
         1. Transition run to FAILED (if valid).
         2. Abort any in-progress checkpoints for the run.
-        3. If auto_recover is enabled, transition FAILED -> RECOVERING -> RUNNING.
+        3. If auto_recover is enabled, transition to RECOVERING and restart
+           the distributed worker group.
         """
         self._recovering.add(run_id)
 
@@ -112,7 +123,8 @@ class RecoveryManager:
         if status.state in (RunState.CANCELLED, RunState.COMPLETED):
             logger.info(
                 "Run %s is in terminal state %s, skipping recovery",
-                run_id, status.state.value,
+                run_id,
+                status.state.value,
             )
             return
 
@@ -124,12 +136,15 @@ class RecoveryManager:
             try:
                 self._coordinator.transition_run(run_id, RunState.FAILED)
                 logger.info(
-                    "Run %s transitioned to FAILED (was %s)", run_id, status.state.value,
+                    "Run %s transitioned to FAILED (was %s)",
+                    run_id,
+                    status.state.value,
                 )
             except InvalidTransitionError:
                 logger.warning(
                     "Cannot transition run %s from %s to FAILED",
-                    run_id, status.state.value,
+                    run_id,
+                    status.state.value,
                 )
                 return
 
@@ -149,38 +164,70 @@ class RecoveryManager:
                     self._coordinator.update_checkpoint_state(cp.checkpoint_id, "FAILED")
                     logger.info(
                         "Aborted checkpoint %s (was %s) for run %s",
-                        cp.checkpoint_id, cp.state, run_id,
+                        cp.checkpoint_id,
+                        cp.state,
+                        run_id,
                     )
                 except Exception:
                     logger.exception(
                         "Failed to abort checkpoint %s for run %s",
-                        cp.checkpoint_id, run_id,
+                        cp.checkpoint_id,
+                        run_id,
                     )
 
     def _attempt_recovery(self, run_id: str) -> None:
-        """Attempt to transition a FAILED run through RECOVERING to RUNNING.
+        """Move a FAILED run to RECOVERING and restart its worker group.
 
-        If the transition fails at any point, the run remains in its current
-        state and manual intervention may be required.
+        The run intentionally remains RECOVERING until rank 0 has restored the
+        latest committed checkpoint and calls the resume endpoint. Reporting
+        RUNNING before that point would make a dead worker group look healthy.
         """
+        if self._restart_worker_group is None:
+            logger.warning(
+                "Run %s remains FAILED: no worker-group supervisor configured",
+                run_id,
+            )
+            return
+
         try:
             self._coordinator.transition_run(run_id, RunState.RECOVERING)
             logger.info("Run %s transitioned to RECOVERING", run_id)
         except (InvalidTransitionError, KeyError) as exc:
             logger.warning(
-                "Cannot begin recovery for run %s: %s", run_id, exc,
+                "Cannot begin recovery for run %s: %s",
+                run_id,
+                exc,
             )
             return
 
+        self._record_recovery_checkpoint(run_id)
+
         try:
-            self._coordinator.transition_run(run_id, RunState.RUNNING)
+            scheduled = self._restart_worker_group(run_id)
+        except Exception:
+            logger.exception("Worker-group restart failed for run %s", run_id)
+            return
+
+        if scheduled:
             logger.info(
-                "Run %s recovered successfully and is now RUNNING", run_id,
+                "Worker-group restart scheduled for run %s; waiting for checkpoint restore",
+                run_id,
             )
-        except (InvalidTransitionError, KeyError) as exc:
+        else:
             logger.error(
-                "Failed to complete recovery for run %s: %s", run_id, exc,
+                "Run %s remains RECOVERING: worker-group restart was not scheduled",
+                run_id,
             )
+
+    def _record_recovery_checkpoint(self, run_id: str) -> None:
+        """Record the newest committed checkpoint selected for recovery."""
+        committed = [
+            checkpoint
+            for checkpoint in self._coordinator.list_checkpoints(run_id)
+            if checkpoint.state == "COMMITTED"
+        ]
+        latest = max(committed, key=lambda checkpoint: checkpoint.step, default=None)
+        self._recovery_checkpoints[run_id] = latest.checkpoint_id if latest is not None else None
 
     # -- execute recovery (async API) ---------------------------------------
 
@@ -204,7 +251,9 @@ class RecoveryManager:
             self._recovery_checkpoints[run_id] = latest.checkpoint_id
             logger.info(
                 "Recovery for run %s will resume from checkpoint %s (step %d)",
-                run_id, latest.checkpoint_id, latest.step,
+                run_id,
+                latest.checkpoint_id,
+                latest.step,
             )
         else:
             self._recovery_checkpoints[run_id] = None
@@ -217,7 +266,8 @@ class RecoveryManager:
         if status.state != RunState.RUNNING:
             logger.info(
                 "Run %s is in state %s, not transitioning during recovery",
-                run_id, status.state.value,
+                run_id,
+                status.state.value,
             )
 
     def get_recovery_checkpoint(self, run_id: str) -> str | None:
@@ -232,7 +282,8 @@ class RecoveryManager:
     def recover_run(self, run_id: str) -> bool:
         """Manually trigger recovery for a FAILED run.
 
-        Returns True if recovery succeeded (run is now RUNNING), False otherwise.
+        Returns True if a worker-group restart was scheduled. The run remains
+        RECOVERING until a worker confirms checkpoint restoration.
         """
         status = self._coordinator.get_run(run_id)
         if status is None:
@@ -242,17 +293,29 @@ class RecoveryManager:
         if status.state != RunState.FAILED:
             logger.warning(
                 "Cannot recover run %s: current state is %s (expected FAILED)",
-                run_id, status.state.value,
+                run_id,
+                status.state.value,
             )
             return False
 
         self._abort_pending_checkpoints(run_id)
 
+        if self._restart_worker_group is None:
+            logger.error(
+                "Manual recovery for run %s cannot restart workers: no supervisor",
+                run_id,
+            )
+            return False
+
         try:
             self._coordinator.transition_run(run_id, RunState.RECOVERING)
-            self._coordinator.transition_run(run_id, RunState.RUNNING)
-            logger.info("Run %s manually recovered to RUNNING", run_id)
-            return True
+            self._record_recovery_checkpoint(run_id)
         except (InvalidTransitionError, KeyError) as exc:
             logger.error("Manual recovery failed for run %s: %s", run_id, exc)
+            return False
+
+        try:
+            return self._restart_worker_group(run_id)
+        except Exception:
+            logger.exception("Manual worker-group restart failed for run %s", run_id)
             return False
