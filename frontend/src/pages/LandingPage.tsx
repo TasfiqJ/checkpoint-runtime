@@ -44,7 +44,7 @@ const QA_ITEMS = [
   },
   {
     q: 'How does this compare to what companies like Meta actually use?',
-    a: 'The architecture pattern is the same: control plane / data plane split, async checkpointing, content-addressed storage. But at a different scale. Meta\'s systems handle thousands of GPUs across data centers with dedicated hardware for checkpoint storage. Mine runs on a single 4-vCPU VPS with 2 CPU-only workers. The engineering principles are identical though: atomic commits, heartbeat-based failure detection, manifest-driven recovery. I built this to prove I understand the architecture, not to compete with their scale.',
+    a: 'The architecture pattern is the same: control plane / data plane split, async checkpointing, content-addressed storage. But at a different scale. Meta\'s systems handle thousands of GPUs across data centers with dedicated hardware for checkpoint storage. My original deployment ran on a single 4-vCPU VPS with 2 CPU-only workers; the paid VPS is now stopped and the real stack runs locally. The engineering principles are identical though: atomic commits, heartbeat-based failure detection, manifest-driven recovery. I built this to prove I understand the architecture, not to compete with their scale.',
   },
   {
     q: 'What was the hardest bug you ran into?',
@@ -97,19 +97,19 @@ export default function LandingPage() {
             I designed and built from scratch</span> that saves progress automatically and recovers instantly.
           </p>
 
-          <div className="mt-10 flex items-center justify-center gap-4">
+          <div className="mt-10 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-4">
             <Link
               to="/demo"
-              className="btn-primary cursor-pointer inline-flex items-center gap-2 px-8 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150"
+              className="btn-primary cursor-pointer inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150 w-full sm:w-auto"
             >
-              Try the Live Demo
+              Open the Simulation
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </Link>
             <Link
               to="/how-it-works"
-              className="btn-primary cursor-pointer inline-flex items-center gap-2 px-8 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150"
+              className="btn-primary cursor-pointer inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150 w-full sm:w-auto"
             >
               How I Built It
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -276,15 +276,13 @@ export default function LandingPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-txt-1 mb-2">
-                  I made it real, not a mock or simulation
+                  I built and validated the real stack
                 </h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  Anyone can draw architecture diagrams. I wanted to actually run it. Everything runs as
-                  11 real Docker containers on a cloud server in Virginia. Real PyTorch models train across workers.
-                  Real checkpoint data saves to real object storage (MinIO, S3-compatible).
-                  When you click "Kill" in the demo, it sends{' '}
-                  <code className="text-xs bg-surface-3 px-1.5 py-0.5 rounded text-txt-2 font-mono">docker kill</code>{' '}
-                  to a real container. The recovery you see is the actual system doing its job.
+                  The full 11-container system previously ran on a Hetzner VPS, where I exercised real PyTorch
+                  workers, checkpoint files, failure detection, and recovery. I’m retiring that paid backend
+                  server to avoid an ongoing hosting bill. The hosted Simulation now runs entirely in your browser;
+                  the same real Docker stack is still available on the Try Locally page.
                 </p>
               </div>
             </div>
@@ -304,14 +302,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── What the Live Demo Shows ──────────────────────────── */}
+      {/* ── What the Simulation Shows ───────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
-        <SectionCounter num={3} total={TOTAL} label="Live Demo" />
+        <SectionCounter num={3} total={TOTAL} label="Simulation" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
-          I Built This Demo So You Can Break It
+          Explore the Recovery Flow in Your Browser
         </h2>
         <p className="text-base text-txt-3 mb-12 max-w-xl">
-          Three steps, takes about 30 seconds
+          A browser-only walkthrough of the real system's failure and recovery sequence. No backend is contacted.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -321,8 +319,8 @@ export default function LandingPage() {
             </div>
             <h3 className="text-lg font-bold text-txt-1">Training Starts</h3>
             <p className="text-base text-txt-2 leading-relaxed">
-              Two real servers begin training an AI model together.
-              You'll see the step counter climbing and checkpoints saving automatically every 50 steps.
+              Two simulated workers begin a representative training run.
+              You'll see the step counter climb and checkpoint events appear every 50 steps.
             </p>
           </div>
 
@@ -330,12 +328,11 @@ export default function LandingPage() {
             <div className="w-12 h-12 mx-auto rounded-2xl bg-err-muted flex items-center justify-center">
               <span className="text-err font-bold text-lg">2</span>
             </div>
-            <h3 className="text-lg font-bold text-txt-1">You Crash a Server</h3>
+            <h3 className="text-lg font-bold text-txt-1">You Simulate a Crash</h3>
             <p className="text-base text-txt-2 leading-relaxed">
-              Click the Kill button to destroy one of the training servers.
-              This sends a real{' '}
+              Click the failure control to advance the browser simulation. It models the same event that a real{' '}
               <code className="text-xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">docker kill</code>{' '}
-              command, and the container actually dies on the server in Virginia.
+              produced when the hosted stack was online, without touching a server.
             </p>
           </div>
 
@@ -345,8 +342,8 @@ export default function LandingPage() {
             </div>
             <h3 className="text-lg font-bold text-txt-1">It Recovers Itself</h3>
             <p className="text-base text-txt-2 leading-relaxed">
-              The system detects the crash via missed heartbeats, restarts the server, loads the last checkpoint
-              from storage, and resumes training. All automatically in under 5 seconds.
+              The simulation visualizes heartbeat expiry, restart, checkpoint restore, and resumed training.
+              Run the Docker stack locally to execute that recovery path against real containers.
             </p>
           </div>
         </div>
@@ -364,27 +361,28 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── What's Actually Running ──────────────────────────── */}
+      {/* ── Hosting status and local stack ─────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
         <SectionCounter num={4} total={TOTAL} label="Infrastructure" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
-          What's Actually Running Right Now
+          The Public Site No Longer Needs the Paid Backend
         </h2>
         <p className="text-base text-txt-3 mb-10 max-w-xl">
-          This isn't a mock-up. 11 real Docker containers are running on a VPS I provisioned
+          This system previously ran on a Hetzner VPS. I’m retiring that paid backend server to avoid
+          ongoing cost; the public site is now backend-free, while the real stack remains runnable locally.
         </p>
 
         <div className="card p-6 space-y-6">
-          {/* Server info */}
+          {/* Hosting status */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pb-5 border-b border-line">
             <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-ok animate-pulse" />
-              <span className="text-base font-semibold text-txt-1">Live Server</span>
+              <div className="w-3 h-3 rounded-full bg-warn" />
+              <span className="text-base font-semibold text-txt-1">Hosted Backend Being Retired</span>
             </div>
             <div className="flex flex-wrap gap-2 text-sm">
-              <span className="bg-surface-3 text-txt-2 px-2.5 py-1 rounded-lg font-mono">Hetzner CPX31</span>
-              <span className="bg-surface-3 text-txt-2 px-2.5 py-1 rounded-lg font-mono">4 vCPU &middot; 8 GB RAM</span>
-              <span className="bg-surface-3 text-txt-2 px-2.5 py-1 rounded-lg font-mono">Ashburn, Virginia</span>
+              <span className="bg-surface-3 text-txt-2 px-2.5 py-1 rounded-lg font-mono">Previously: Hetzner CPX31</span>
+              <span className="bg-surface-3 text-txt-2 px-2.5 py-1 rounded-lg font-mono">Public demo: browser-only</span>
+              <span className="bg-surface-3 text-txt-2 px-2.5 py-1 rounded-lg font-mono">Real stack: local Docker</span>
             </div>
           </div>
 
@@ -411,8 +409,8 @@ export default function LandingPage() {
           </div>
 
           <p className="text-sm text-txt-3 text-center">
-            All 11 containers run on a single VPS via Docker Compose. The frontend you're viewing is served from Vercel,
-            and every API call hits the real backend in Virginia.
+            These are the 11 services in the project. They are not running behind this hosted page;
+            follow Try Locally to launch them together with Docker Compose on your own machine.
           </p>
         </div>
       </section>
@@ -510,15 +508,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Proof It's Real ───────────────────────────────────── */}
+      {/* ── Simulation versus local execution ────────────────────────── */}
       <section className="max-w-4xl mx-auto px-5 py-16">
         <SectionCounter num={7} total={TOTAL} label="Proof" />
         <div className="card p-8 border-brand-violet/20">
           <h2 className="text-2xl font-bold text-txt-1 text-center mb-3">
-            "How do I know this isn't just a fancy animation?"
+            What is simulated, and what is real?
           </h2>
           <p className="text-base text-txt-3 text-center mb-6">
-            I get this question. Here's how you can verify everything is real:
+            The public Simulation is intentionally browser-only. Run the project locally for real execution:
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex items-start gap-3">
@@ -526,8 +524,8 @@ export default function LandingPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <p className="text-base text-txt-2">
-                <span className="text-txt-1 font-medium">The demo panel shows real Docker logs</span>, actual container
-                output streaming in real-time, not pre-recorded text
+                <span className="text-txt-1 font-medium">Simulation:</span> representative training, checkpoint,
+                failure, and recovery events generated in your browser
               </p>
             </div>
             <div className="flex items-start gap-3">
@@ -535,8 +533,8 @@ export default function LandingPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <p className="text-base text-txt-2">
-                <span className="text-txt-1 font-medium">The storage browser shows real S3 files</span>, checkpoint shards
-                with SHA-256 hashes appear as they're written
+                <span className="text-txt-1 font-medium">Local Docker:</span> real MinIO checkpoint shards and
+                SHA-256 hashes appear as the workers write them
               </p>
             </div>
             <div className="flex items-start gap-3">
@@ -544,9 +542,9 @@ export default function LandingPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <p className="text-base text-txt-2">
-                <span className="text-txt-1 font-medium">The container panel shows real{' '}
-                <code className="text-xs bg-surface-3 px-1 py-0.5 rounded font-mono">docker ps</code> output</span>. You can
-                see the killed container go down and come back
+                <span className="text-txt-1 font-medium">Local Docker:</span> inspect real{' '}
+                <code className="text-xs bg-surface-3 px-1 py-0.5 rounded font-mono">docker ps</code> output and watch a
+                killed worker stop and recover
               </p>
             </div>
             <div className="flex items-start gap-3">
@@ -554,8 +552,8 @@ export default function LandingPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <p className="text-base text-txt-2">
-                <span className="text-txt-1 font-medium">The system info shows real server stats</span>: hostname, CPU count,
-                memory usage, Docker version from the actual Hetzner VPS
+                <span className="text-txt-1 font-medium">No hidden backend:</span> the hosted page does not contact
+                Hetzner or any replacement compute server
               </p>
             </div>
           </div>
@@ -628,14 +626,14 @@ export default function LandingPage() {
         <div className="space-y-6">
           <h2 className="text-3xl font-bold text-txt-1">Want to see it break and recover?</h2>
           <p className="text-base text-txt-2 max-w-md mx-auto">
-            Crash a real server and watch it recover. The live demo takes 30 seconds.
+            Explore the recovery sequence safely in your browser, or run the real containers on your machine.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               to="/demo"
               className="btn-primary cursor-pointer inline-flex items-center gap-2 px-8 py-3.5 text-base font-semibold rounded-lg transition-colors duration-150"
             >
-              Try Live Demo
+              Open Simulation
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>

@@ -113,11 +113,11 @@ export default function TryLocallyPage() {
           </h1>
 
           <p className="mt-8 text-xl text-txt-2 max-w-2xl mx-auto leading-relaxed">
-            The live demo at{' '}
+            The hosted page at{' '}
             <Link to="/demo" className="text-brand-violet font-medium hover:underline">ckpt.tasfiqj.com</Link>{' '}
-            isn't a fancy frontend animation. It's <span className="text-txt-1 font-medium">11 Docker containers</span> doing
-            real distributed training, real checkpoint saves, and real failure recovery. Here's how to run
-            the whole thing on your laptop in about two minutes.
+            now provides a clearly labelled browser-only simulation. The paid Hetzner backend is being retired to avoid
+            ongoing cost. This guide shows how to run the <span className="text-txt-1 font-medium">real 11-container
+            Docker stack</span> on your own machine in about two minutes.
           </p>
         </div>
       </section>
@@ -220,8 +220,8 @@ export default function TryLocallyPage() {
           11 containers. Here's what each one does.
         </h2>
         <p className="text-base text-txt-3 mb-10 max-w-xl">
-          This is the same stack running in production on my Hetzner server in Virginia.
-          Locally, everything maps to localhost.
+          This is the same stack that previously ran on my Hetzner server in Virginia.
+          That paid backend is being retired; locally, every service maps to localhost.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -250,7 +250,7 @@ export default function TryLocallyPage() {
       <section className="max-w-4xl mx-auto px-5 py-16">
         <SectionCounter num={4} total={TOTAL} label="Dashboard" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
-          Open the dashboard. It's alive.
+          Verify the local stack. It's alive.
         </h2>
         <p className="text-base text-txt-3 mb-10 max-w-xl">
           The workers started training the moment the containers came up. By the time you open
@@ -272,8 +272,9 @@ export default function TryLocallyPage() {
                   </code>
                 </p>
                 <p className="text-sm text-txt-3 mt-2">
-                  You'll land on the same operator console you see at ckpt.tasfiqj.com.
-                  Navigate to the <span className="text-txt-1 font-medium">Live Demo</span> page.
+                  You'll land on the same frontend served at ckpt.tasfiqj.com.
+                  Its <span className="text-txt-1 font-medium">Simulation</span> page remains browser-only;
+                  use the local endpoints below to inspect the real containers.
                 </p>
               </div>
             </div>
@@ -285,13 +286,12 @@ export default function TryLocallyPage() {
                 <span className="text-info font-bold text-sm">2</span>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-txt-1 mb-2">Click "Start the Demo"</h3>
+                <h3 className="text-lg font-bold text-txt-1 mb-2">Check the real local run</h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  The frontend connects to the live training run. You'll see the{' '}
-                  <span className="text-ok font-medium">step counter climbing</span>, the{' '}
-                  <span className="text-info font-medium">training loss decreasing</span>, and{' '}
-                  <span className="text-txt-1 font-medium">blue checkpoint dots</span> appearing on
-                  the chart every 50 steps as the model state gets saved to MinIO.
+                  Open <code className="text-sm bg-surface-3 px-2 py-0.5 rounded text-brand-violet font-mono">
+                    http://localhost:8000/api/runs
+                  </code>{' '}to see the training step advance, then inspect MinIO for checkpoint files written
+                  by the local workers.
                 </p>
               </div>
             </div>
@@ -303,13 +303,12 @@ export default function TryLocallyPage() {
                 <span className="text-brand-violet font-bold text-sm">3</span>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-txt-1 mb-2">Watch the proof panels</h3>
+                <h3 className="text-lg font-bold text-txt-1 mb-2">Watch the local proof</h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  The right side of the page shows live proof — real{' '}
-                  <code className="text-2xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">stdout</code>{' '}
-                  from Docker containers, actual files appearing in MinIO storage with SHA-256 hashes,
-                  container statuses, and system info from your machine.{' '}
-                  <span className="text-txt-1 font-medium">None of this is mocked.</span>
+                  Use Docker logs, Grafana, Jaeger, and MinIO on localhost to inspect real{' '}
+                  <code className="text-2xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">stdout</code>,
+                  checkpoint files with SHA-256 hashes, container status, and telemetry from your machine.{' '}
+                  <span className="text-txt-1 font-medium">That local evidence is not mocked.</span>
                 </p>
               </div>
             </div>
@@ -321,7 +320,7 @@ export default function TryLocallyPage() {
       <section className="max-w-4xl mx-auto px-5 py-16">
         <SectionCounter num={5} total={TOTAL} label="Break It" />
         <h2 className="text-3xl sm:text-4xl font-bold text-txt-1 mb-4">
-          Now destroy a server. On purpose.
+          Now stop a local worker. On purpose.
         </h2>
         <p className="text-base text-txt-3 mb-10 max-w-xl">
           This is the whole point. You're about to prove that the system can recover
@@ -337,17 +336,18 @@ export default function TryLocallyPage() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-lg font-bold text-err mb-2">Click the "Kill This Server" button</h3>
+                <h3 className="text-lg font-bold text-err mb-2">Kill a worker container</h3>
                 <p className="text-base text-txt-2 leading-relaxed">
-                  Wait for at least 2 checkpoints (you'll see blue dots on the loss chart), then
-                  hit the red kill button on either worker. This sends a real{' '}
-                  <code className="text-xs bg-surface-3 px-1 py-0.5 rounded text-txt-3 font-mono">docker kill</code>{' '}
-                  — the container actually stops. Both workers go down (DDP requires it), and the
-                  system transitions to <span className="text-err font-medium">FAILED</span>.
+                  Wait until the run has created at least 2 checkpoints, then call the local demo endpoint.
+                  It stops both DDP workers, marks the run <span className="text-err font-medium">FAILED</span>,
+                  and schedules the tested restart and recovery path.
                 </p>
               </div>
             </div>
           </div>
+
+          <CodeBlock label="macOS / Linux terminal">{'curl -X POST http://localhost:8000/api/demo/kill-worker/ckpt-worker-0'}</CodeBlock>
+          <CodeBlock label="Windows PowerShell">{'Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/demo/kill-worker/ckpt-worker-0'}</CodeBlock>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="card px-4 py-4 text-center">
@@ -379,10 +379,9 @@ export default function TryLocallyPage() {
           </div>
 
           <p className="text-base text-txt-2 leading-relaxed">
-            The <span className="text-txt-1 font-medium">recovery proof card</span> will show you the exact step
-            and loss value that was saved vs. restored — they match. If the checkpoint had failed, the loss
-            would reset to ~2.3 (random weights). Look at the chart: training continues smoothly from
-            where it left off.
+            Open <code className="text-xs bg-surface-3 px-1 py-0.5 rounded text-brand-violet font-mono">http://localhost:3000/runs</code>{' '}
+            to watch the local operator console, or inspect the control-plane and worker logs. The restored
+            step should match the latest committed checkpoint, and training should continue from there.
           </p>
         </div>
       </section>
@@ -490,18 +489,18 @@ export default function TryLocallyPage() {
       <section className="max-w-4xl mx-auto px-5 py-16 text-center">
         <div className="card p-8 sm:p-12 border-brand-violet/20">
           <h2 className="text-2xl sm:text-3xl font-bold text-txt-1 mb-4">
-            Still here? Go try the live version.
+            Want a quick preview first?
           </h2>
           <p className="text-base text-txt-2 mb-8 max-w-lg mx-auto">
-            If you don't want to run Docker, the exact same stack is already running
-            on my server. Same containers, same code — just hosted.
+            Open the browser-only Simulation to explore the sequence without a backend.
+            Return to this guide whenever you want to run the real Docker stack locally.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               to="/demo"
               className="btn-primary cursor-pointer inline-flex items-center gap-2 px-8 py-3.5 text-base font-semibold rounded-lg"
             >
-              Try the Live Demo
+              Open Simulation
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>

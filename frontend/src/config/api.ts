@@ -1,7 +1,8 @@
 /**
  * API base URL configuration.
  *
- * In Docker (nginx proxy):  VITE_API_URL is unset → API_BASE = "" → fetch("/api/...")
- * On Vercel (external CDN): VITE_API_URL = "https://api-checkpoint.tasfiqj.com" → fetch("https://api-checkpoint.tasfiqj.com/api/...")
+ * In local Docker (nginx proxy): VITE_API_URL is unset → API_BASE = "" → fetch("/api/...")
+ * In local Vite development: set VITE_API_URL to the loopback control-plane URL.
+ * The hosted public routes do not load these operator-console API modules.
  */
 export const API_BASE: string = import.meta.env.VITE_API_URL ?? "";

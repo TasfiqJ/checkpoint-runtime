@@ -3,7 +3,11 @@
 ![CI](https://github.com/TasfiqJ/checkpoint-runtime/actions/workflows/ci.yml/badge.svg)
 ![Integration](https://github.com/TasfiqJ/checkpoint-runtime/actions/workflows/integration.yml/badge.svg)
 
-**Live Demo:** https://ckpt.tasfiqj.com/
+**Browser Simulation:** https://ckpt.tasfiqj.com/demo
+
+The public site no longer depends on the paid Hetzner backend, which is being retired.
+The simulation runs entirely in the browser. To exercise the real workers, storage,
+failure detection, and recovery path, run the Docker stack locally.
 
 A fault-tolerant distributed checkpoint runtime for machine learning
 training.\
@@ -151,21 +155,31 @@ All services will start automatically.
 
 ------------------------------------------------------------------------
 
-# Live Demo
+# Browser Simulation and Local Runtime
 
-Open:
+Open the browser-only simulation:
 
-https://ckpt.tasfiqj.com/
+https://ckpt.tasfiqj.com/demo
 
-You can:
+It demonstrates the user-visible sequence without contacting a backend:
 
-1.  Start a training run\
-2.  Watch checkpoints appear\
-3.  Kill a worker container\
-4.  Watch the system automatically recover and resume training
+1.  Start a simulated training run\
+2.  Watch simulated checkpoints appear\
+3.  Stop a simulated worker\
+4.  Watch the browser model failure, checkpoint restore, and resumed training
 
-The demo shows the full failure detection and checkpoint restore
-pipeline.
+For real execution, follow the local Docker instructions above. Once the local stack
+has at least two checkpoints, trigger its coordinated failure test with:
+
+```bash
+curl -X POST http://localhost:8000/api/demo/kill-worker/ckpt-worker-0
+```
+
+On Windows PowerShell, use:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/demo/kill-worker/ckpt-worker-0
+```
 
 ------------------------------------------------------------------------
 

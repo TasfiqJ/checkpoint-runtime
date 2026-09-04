@@ -209,13 +209,15 @@ s3_client.put_object(bucket, storage_key, bytes).await?;
       {/* -- WHAT HAPPENS WHEN A WORKER DIES ----------------------------- */}
       <Section title="What Happens When a Worker Dies">
         <P>
-          You click the "Kill" button on the demo page. Here's every single thing that happens:
+          The hosted Simulation illustrates this sequence entirely in the browser; it does not call a backend.
+          When you run the real Docker stack locally and kill a worker, here's every single thing that happens:
         </P>
 
         <Step n={1} title="The container is killed">
           <P>
-            The frontend sends <Code>POST /api/demo/kill-worker/ckpt-worker-0</Code>.
-            The control plane runs:
+            In the local setup, call <Code>POST /api/demo/kill-worker/ckpt-worker-0</Code> on
+            <Code> localhost:8000</Code>. The endpoint stops both DDP workers, marks the run failed,
+            and schedules the same restart path used by the original hosted interface:
           </P>
           <CodeBlock>{`subprocess.run(["docker", "kill", "ckpt-worker-0"])`}</CodeBlock>
           <P>
@@ -449,7 +451,8 @@ start_step = state["step"]  # 100, not 0!`}</CodeBlock>
         </P>
         <P>
           This system uses the <Code>gloo</Code> backend (CPU-only) instead of <Code>nccl</Code> (GPU).
-          Since this is a demo running on a VPS without GPUs, gloo works over regular TCP.
+          The previous Hetzner deployment and the default local Docker stack are CPU-only, so gloo works
+          over regular TCP. The public site no longer relies on the paid VPS, which is being retired.
           To switch to GPU training, you'd change one line: <Code>backend="nccl"</Code>.
         </P>
         <P>

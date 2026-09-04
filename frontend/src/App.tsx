@@ -1,21 +1,24 @@
-import { useState, useEffect, useRef } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useState, useEffect, useRef, type ReactNode } from 'react';
+import { Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import LandingPage from './pages/LandingPage';
-import RunsPage from './pages/RunsPage';
-import RunDetailPage from './pages/RunDetailPage';
-import CheckpointBrowser from './pages/CheckpointBrowser';
-import HealthPage from './pages/HealthPage';
-import PerformancePage from './pages/PerformancePage';
 import DemoPage from './pages/DemoPage';
 import HowItWorksPage from './pages/HowItWorksPage';
 import TryLocallyPage from './pages/TryLocallyPage';
 import BenchmarksPage from './pages/BenchmarksPage';
 import ThemeToggle from './components/ThemeToggle';
 
+const RunsPage = lazy(() => import('./pages/RunsPage'));
+const RunDetailPage = lazy(() => import('./pages/RunDetailPage'));
+const CheckpointBrowser = lazy(() => import('./pages/CheckpointBrowser'));
+const HealthPage = lazy(() => import('./pages/HealthPage'));
+const PerformancePage = lazy(() => import('./pages/PerformancePage'));
+
+const LOCAL_RUNTIME_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+
 const desktopNavItems = [
   { to: '/how-it-works', label: 'How It Works', icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
-  { to: '/demo', label: 'Live Demo', highlight: true, icon: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z' },
+  { to: '/demo', label: 'Simulation', highlight: true, icon: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z' },
   { to: '/try-locally', label: 'Try Locally', icon: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { to: '/benchmarks', label: 'Benchmarks', icon: 'M3 13.5h4.5V21H3v-7.5zm6.75-6h4.5V21h-4.5V7.5zm6.75-4.5H21v18h-4.5V3z' },
 ];
@@ -23,7 +26,7 @@ const desktopNavItems = [
 const mobileNavItems = [
   { to: '/', label: 'Home' },
   { to: '/how-it-works', label: 'How It Works' },
-  { to: '/demo', label: 'Live Demo' },
+  { to: '/demo', label: 'Simulation' },
   { to: '/try-locally', label: 'Try Locally' },
   { to: '/benchmarks', label: 'Benchmarks' },
 ];
@@ -92,6 +95,11 @@ function App() {
   };
 
   const isLanding = location.pathname === '/';
+  const localOperatorRoute = (element: ReactNode) => (
+    LOCAL_RUNTIME_HOSTS.has(window.location.hostname)
+      ? <Suspense fallback={<div className="card p-6 text-sm text-txt-3">Loading the local operator console…</div>}>{element}</Suspense>
+      : <Navigate to="/demo" replace />
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-0">
@@ -268,11 +276,11 @@ function App() {
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/demo" element={<DemoPage />} />
           <Route path="/try-locally" element={<TryLocallyPage />} />
-          <Route path="/runs" element={<RunsPage />} />
-          <Route path="/runs/:id" element={<RunDetailPage />} />
-          <Route path="/checkpoints" element={<CheckpointBrowser />} />
-          <Route path="/health" element={<HealthPage />} />
-          <Route path="/performance" element={<PerformancePage />} />
+          <Route path="/runs" element={localOperatorRoute(<RunsPage />)} />
+          <Route path="/runs/:id" element={localOperatorRoute(<RunDetailPage />)} />
+          <Route path="/checkpoints" element={localOperatorRoute(<CheckpointBrowser />)} />
+          <Route path="/health" element={localOperatorRoute(<HealthPage />)} />
+          <Route path="/performance" element={localOperatorRoute(<PerformancePage />)} />
           <Route path="/benchmarks" element={<BenchmarksPage />} />
         </Routes>
       </main>
